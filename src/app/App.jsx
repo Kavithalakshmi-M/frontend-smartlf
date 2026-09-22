@@ -1,11 +1,58 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { AuthProvider, useAuth } from "../context/AuthContext";
+import { updateProfileApi, changePasswordApi, getUserProfileApi, getAllUsersApi, deleteUserApi, registerApi } from "../api/auth";
+import {
+  createLostItemApi,
+  getLostItemsApi,
+  getMyLostItemsApi,
+  updateLostItemStatusApi,
+  deleteLostItemApi,
+  createFoundItemApi,
+  getFoundItemsApi,
+  getMyFoundItemsApi,
+  updateFoundItemStatusApi,
+  deleteFoundItemApi,
+  getImageUrl,
+  formatDateForUI
+} from "../api/items";
+import {
+  getMatchesForUserApi,
+  getMatchesByLostItemApi,
+  getMatchesByFoundItemApi,
+  updateMatchStatusApi,
+  triggerMatchRescanApi
+} from "../api/matches";
+import {
+  submitClaimApi,
+  getClaimByIdApi,
+  getMyClaimsApi,
+  getAllClaimsApi,
+  reviewClaimApi
+} from "../api/claims";
+import {
+  getNotificationsApi,
+  markNotificationReadApi,
+  getUnreadCountApi,
+  createNotificationApi
+} from "../api/notifications";
+import {
+  getStaffDashboardApi,
+  getAdminDashboardApi,
+  getAnalyticsApi
+} from "../api/dashboard";
+import {
+  getStationsApi,
+  createStationApi,
+  updateStationApi,
+  deleteStationApi
+} from "../api/stations";
 import {
   Train, Search, Bell, User, Home, FileText, Package, Cpu, ClipboardList, LogOut,
   X, ChevronRight, MapPin, Calendar, Clock, Upload, CheckCircle, AlertCircle,
   TrendingUp, Users, Shield, Zap, Globe, ArrowRight, Star, Mail, Phone, Lock,
   Eye, EyeOff, BarChart2, Settings, Activity, Tag, Camera, Filter, Download,
   Edit2, Trash2, ChevronDown, RefreshCw, Check, Info, AlertTriangle, Inbox,
-  Building, Map, Plus, CheckSquare, XCircle, Sliders, ExternalLink, HelpCircle
+  Building, Map as MapIcon, Plus, CheckSquare, XCircle, Sliders, ExternalLink, HelpCircle
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart as RechartsPie, Pie, Cell,
@@ -20,126 +67,14 @@ const INITIAL_STATIONS = [
   "Bengaluru City", "Hyderabad Bus Terminal", "Pune Station", "Ahmedabad Junction"
 ];
 
-const INITIAL_MONTHLY_DATA = [
-  { month: "Feb", lost: 48, found: 31 },
-  { month: "Mar", lost: 62, found: 44 },
-  { month: "Apr", lost: 55, found: 40 },
-  { month: "May", lost: 78, found: 58 },
-  { month: "Jun", lost: 91, found: 72 },
-  { month: "Jul", lost: 84, found: 69 }
-];
-
-const INITIAL_CATEGORY_DATA = [
-  { name: "Luggage", value: 32, color: "#2563EB" },
-  { name: "Electronics", value: 24, color: "#7C3AED" },
-  { name: "Wallet", value: 18, color: "#16A34A" },
-  { name: "Documents", value: 14, color: "#CA8A04" },
-  { name: "Other", value: 12, color: "#DC2626" }
-];
-
-const INITIAL_AI_MATCHES = [
-  {
-    id: 1,
-    lostItem: "Black Samsonite Trolley Bag",
-    foundItem: "Black Trolley Bag (Large)",
-    score: 94,
-    station: "New Delhi Railway Station",
-    date: "2026-07-06",
-    img: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop&auto=format",
-    confidence: "high",
-    category: "Luggage",
-    description: "Large black wheeled trolley bag found at Platform 3. Contains clothing and laptop accessories."
-  },
-  {
-    id: 2,
-    lostItem: "iPhone 15 Pro (Space Black)",
-    foundItem: "Black Smartphone",
-    score: 87,
-    station: "CSMT Mumbai",
-    date: "2026-07-05",
-    img: "https://images.unsplash.com/photo-1512054502232-10a0a035d672?w=400&h=400&fit=crop&auto=format",
-    confidence: "medium",
-    category: "Electronics",
-    description: "iPhone 15 Pro in space black cover found near waiting room area."
-  },
-  {
-    id: 3,
-    lostItem: "Blue Leather Wallet",
-    foundItem: "Blue Bifold Wallet",
-    score: 76,
-    station: "Chennai Central",
-    date: "2026-07-04",
-    img: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=400&fit=crop&auto=format",
-    confidence: "low",
-    category: "Wallet",
-    description: "Blue leather bifold wallet with cards and cash found at ticketing counter."
-  }
-];
-
-const INITIAL_NOTIFICATIONS = [
-  { id: 1, type: "success", title: "AI Match Found!", body: "We found a 94% match for your Black Samsonite Trolley Bag.", time: "2h ago", read: false },
-  { id: 2, type: "info", title: "Claim Approved", body: "Your ownership claim for iPhone 15 Pro has been approved.", time: "5h ago", read: false },
-  { id: 3, type: "warning", title: "Verification Requested", body: "Please provide additional proof for your wallet claim.", time: "1d ago", read: true },
-  { id: 4, type: "success", title: "Item Ready for Pickup", body: "Your bag is ready for collection at New Delhi Station.", time: "2d ago", read: true }
-];
-
-const INITIAL_LOST_ITEMS = [
-  { id: 1, item: "Black Samsonite Trolley Bag", category: "Luggage", station: "New Delhi Railway Station", date: "Jul 6, 2026", time: "14:30", status: "Matched", match: 94, reporter: "Priya Sharma", userEmail: "priya@gmail.com", desc: "Black wheeled trolley bag with red ribbon on top handle." },
-  { id: 2, item: "iPhone 15 Pro", category: "Electronics", station: "CSMT Mumbai", date: "Jul 5, 2026", time: "11:15", status: "Searching", match: null, reporter: "Arjun Patel", userEmail: "arjun@gmail.com", desc: "Space black iPhone in transparent case." },
-  { id: 3, item: "Blue Leather Wallet", category: "Wallet", station: "Chennai Central", date: "Jul 4, 2026", time: "09:45", status: "Pending", match: 76, reporter: "Sunita Rao", userEmail: "sunita@gmail.com", desc: "Blue leather bifold wallet with debit cards." },
-  { id: 4, item: "Aadhar Card + PAN Card", category: "Documents", station: "Howrah Junction", date: "Jul 3, 2026", time: "16:20", status: "Closed", match: null, reporter: "Ravi Kumar", userEmail: "ravi@gmail.com", desc: "Laminated plastic pouch containing ID cards." }
-];
-
-const INITIAL_FOUND_ITEMS = [
-  { id: 1, name: "Black Trolley Bag", category: "Luggage", date: "Jul 6, 2026", time: "15:00", location: "Platform 3", station: "New Delhi Railway Station", status: "Available", img: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=120&h=120&fit=crop&auto=format", desc: "Found under seat at Platform 3." },
-  { id: 2, name: "iPhone 15 Pro", category: "Electronics", date: "Jul 5, 2026", time: "12:00", location: "Waiting Area", station: "CSMT Mumbai", status: "Claimed", img: "https://images.unsplash.com/photo-1512054502232-10a0a035d672?w=120&h=120&fit=crop&auto=format", desc: "Handed over by passenger." },
-  { id: 3, name: "Blue Wallet", category: "Wallet", date: "Jul 4, 2026", time: "10:30", location: "Counter A", station: "Chennai Central", status: "Verification", img: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=120&h=120&fit=crop&auto=format", desc: "Found near ticket vending machine." }
-];
-
-const INITIAL_ADMIN_USERS = [
-  { id: 1, name: "Priya Sharma", email: "priya@gmail.com", phone: "+91 98765 43210", role: "user", status: "active" },
-  { id: 2, name: "Rajesh Kumar", email: "rajesh@station.in", phone: "+91 98765 11111", role: "staff", status: "active" },
-  { id: 3, name: "Anita Verma", email: "anita@gmail.com", phone: "+91 99001 22333", role: "user", status: "inactive" },
-  { id: 4, name: "Mohammed Ali", email: "mali@station.in", phone: "+91 87654 32109", role: "staff", status: "active" },
-  { id: 5, name: "Sunita Rao", email: "sunita@gmail.com", phone: "+91 76543 21098", role: "user", status: "active" }
-];
-
-const INITIAL_CLAIMS = [
-  {
-    id: "CLM-9021",
-    item: "Black Samsonite Trolley Bag",
-    claimant: "Priya Sharma",
-    email: "priya@gmail.com",
-    phone: "+91 98765 43210",
-    date: "Jul 6, 2026",
-    station: "New Delhi Railway Station",
-    status: "Under Verification",
-    answers: {
-      color: "Black with silver zips",
-      brand: "Samsonite",
-      marks: "Red ribbon tied on top handle",
-      contents: "Contains laptop charger, books, blue shirt"
-    },
-    proofImg: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=120&h=120&fit=crop&auto=format"
-  },
-  {
-    id: "CLM-8842",
-    item: "iPhone 15 Pro (Space Black)",
-    claimant: "Arjun Patel",
-    email: "arjun@gmail.com",
-    phone: "+91 91234 56789",
-    date: "Jul 5, 2026",
-    station: "CSMT Mumbai",
-    status: "Approved",
-    answers: {
-      color: "Space Black",
-      brand: "Apple",
-      marks: "Tiny scratch near camera lens",
-      contents: "Passcode verification completed"
-    },
-    proofImg: "https://images.unsplash.com/photo-1512054502232-10a0a035d672?w=120&h=120&fit=crop&auto=format"
-  }
-];
+const INITIAL_MONTHLY_DATA = [];
+const INITIAL_CATEGORY_DATA = [];
+const INITIAL_AI_MATCHES = [];
+const INITIAL_NOTIFICATIONS = [];
+const INITIAL_LOST_ITEMS = [];
+const INITIAL_FOUND_ITEMS = [];
+const INITIAL_ADMIN_USERS = [];
+const INITIAL_CLAIMS = [];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const confidenceColor = (score) =>
@@ -274,7 +209,6 @@ function AdminSidebar({ current, navigate, onLogout }) {
     { icon: Shield, label: "Claim Requests", page: "admin-claims" },
     { icon: Users, label: "Users", page: "admin-users" },
     { icon: Building, label: "Stations", page: "admin-stations" },
-    { icon: BarChart2, label: "Analytics", page: "admin-analytics" },
     { icon: Settings, label: "Settings", page: "admin-settings" }
   ];
   return (
@@ -319,9 +253,10 @@ function AdminSidebar({ current, navigate, onLogout }) {
 
 function Topbar({ title, subtitle, role, navigate, notifications, globalSearch, setGlobalSearch }) {
   const [showBellMenu, setShowBellMenu] = useState(false);
+  const { user } = useAuth();
   const avatarColor = role === "admin" ? "bg-[#7C3AED]" : role === "staff" ? "bg-[#16A34A]" : "bg-[#2563EB]";
-  const initials = role === "admin" ? "AD" : role === "staff" ? "ST" : "US";
-  const name = role === "admin" ? "Admin User" : role === "staff" ? "Rajesh Kumar" : "Priya Sharma";
+  const name = user?.name || "User Account";
+  const initials = (user?.name || "User").split(" ").map(n => n[0]).filter(Boolean).join("").slice(0, 2).toUpperCase() || "U";
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
@@ -616,52 +551,69 @@ function LandingPage({ navigate, openModal }) {
 
 // ─── LOGIN & REGISTER PAGE ───────────────────────────────────────────────────
 function LoginPage({ navigate, openModal, initialRegister = false }) {
+  const { login, register } = useAuth();
   const [isRegister, setIsRegister] = useState(initialRegister);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [regRole, setRegRole] = useState("user");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    if (!email || !password) {
+      toast.error("Please enter both email and password.");
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (email.includes("admin")) {
-        toast.success("Welcome, System Administrator!");
+    try {
+      const normRole = await login(email, password);
+      toast.success("Welcome back!");
+      if (normRole === "admin") {
         navigate("admin-dashboard", "admin");
-      } else if (email.includes("staff")) {
-        toast.success("Welcome, Station Staff!");
+      } else if (normRole === "staff") {
         navigate("staff-dashboard", "staff");
       } else {
-        toast.success(`Welcome back, ${email.split("@")[0]}!`);
         navigate("user-dashboard", "user");
       }
-    }, 800);
+    } catch (err) {
+      console.error("Login error:", err);
+      const serverMsg = err.response?.data?.message || (typeof err.response?.data === "string" ? err.response?.data : null);
+      toast.error(serverMsg || "Invalid credentials or server unavailable.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
+    if (!name || !email || !phone || !password) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
+    if (password.length < 6) {
+      toast.error("Password must contain at least 6 characters.");
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await register({ name, email, phone, password });
+      toast.success("Account created successfully! Please sign in with your credentials.");
+      setIsRegister(false);
+      setPassword("");
+    } catch (err) {
+      console.error("Registration error:", err);
+      const detailsMap = err.response?.data?.details;
+      let detailMsg = null;
+      if (detailsMap && typeof detailsMap === "object") {
+        detailMsg = Object.values(detailsMap).filter(Boolean).join(". ");
+      }
+      const serverMsg = detailMsg || err.response?.data?.message || (typeof err.response?.data === "string" ? err.response?.data : null);
+      toast.error(serverMsg || "Registration failed. Email may already be registered.");
+    } finally {
       setLoading(false);
-      toast.success("Account created successfully! Logging you in...");
-      if (regRole === "staff") navigate("staff-dashboard", "staff");
-      else if (regRole === "admin") navigate("admin-dashboard", "admin");
-      else navigate("user-dashboard", "user");
-    }, 1000);
-  };
-
-  const handleGoogleAuth = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      toast.success("Signed in with Google Account!");
-      navigate("user-dashboard", "user");
-    }, 900);
+    }
   };
 
   return (
@@ -723,13 +675,6 @@ function LoginPage({ navigate, openModal, initialRegister = false }) {
               <h1 className="text-2xl font-bold text-[#111827] mb-2">Welcome back</h1>
               <p className="text-[#6B7280] mb-6">Sign in to access your portal</p>
 
-              <div className="bg-[#EFF6FF] border border-[#DBEAFE] rounded-xl p-3 mb-6 text-xs text-[#2563EB]">
-                <strong>Demo Accounts:</strong><br />
-                • <code>admin@smartlf.in</code> ➔ Admin Console<br />
-                • <code>staff@station.in</code> ➔ Staff Portal<br />
-                • Any email ➔ Passenger Portal
-              </div>
-
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-[#111827] mb-1.5">Email address</label>
@@ -768,7 +713,7 @@ function LoginPage({ navigate, openModal, initialRegister = false }) {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {loading ? <><RefreshCw size={15} className="animate-spin" /> Signing in…</> : "Sign In"}
                 </button>
@@ -816,18 +761,6 @@ function LoginPage({ navigate, openModal, initialRegister = false }) {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#111827] mb-1.5">Account Role</label>
-                  <select
-                    value={regRole}
-                    onChange={(e) => setRegRole(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all"
-                  >
-                    <option value="user">Passenger / User</option>
-                    <option value="staff">Station Staff Member</option>
-                    <option value="admin">System Administrator</option>
-                  </select>
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-[#111827] mb-1.5">Password</label>
                   <input
                     type="password"
@@ -841,7 +774,7 @@ function LoginPage({ navigate, openModal, initialRegister = false }) {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {loading ? <><RefreshCw size={15} className="animate-spin" /> Creating Account…</> : "Register Account"}
                 </button>
@@ -849,31 +782,11 @@ function LoginPage({ navigate, openModal, initialRegister = false }) {
             </>
           )}
 
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-[#E5E7EB]" />
-            <span className="text-xs text-[#9CA3AF]">or continue with</span>
-            <div className="flex-1 h-px bg-[#E5E7EB]" />
-          </div>
-
-          <button
-            onClick={handleGoogleAuth}
-            disabled={loading}
-            className="w-full border border-[#D1D5DB] bg-white hover:bg-[#F9FAFB] text-[#111827] font-medium py-3 rounded-xl text-sm flex items-center justify-center gap-2.5 transition-colors"
-          >
-            <svg width="18" height="18" viewBox="0 0 48 48">
-              <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.5 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z" />
-              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.5 29.5 4 24 4 16.3 4 9.7 8.4 6.3 14.7z" />
-              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.1l-6.2-5.2C29.4 35.5 26.8 36 24 36c-5.2 0-9.6-3.3-11.3-8H6v5.5C9.4 39.6 16.3 44 24 44z" />
-              <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.2 5.2C37 38.2 44 33 44 24c0-1.3-.1-2.6-.4-3.9z" />
-            </svg>
-            Continue with Google
-          </button>
-
           <p className="text-center text-sm text-[#6B7280] mt-6">
             {!isRegister ? (
-              <>Don&apos;t have an account? <button onClick={() => setIsRegister(true)} className="text-[#2563EB] font-semibold hover:underline">Create Account</button></>
+              <>Don&apos;t have an account? <button onClick={() => setIsRegister(true)} className="text-[#2563EB] font-semibold hover:underline cursor-pointer">Create Account</button></>
             ) : (
-              <>Already have an account? <button onClick={() => setIsRegister(false)} className="text-[#2563EB] font-semibold hover:underline">Sign In</button></>
+              <>Already have an account? <button onClick={() => setIsRegister(false)} className="text-[#2563EB] font-semibold hover:underline cursor-pointer">Sign In</button></>
             )}
           </p>
         </div>
@@ -883,14 +796,16 @@ function LoginPage({ navigate, openModal, initialRegister = false }) {
 }
 
 // ─── USER DASHBOARD ───────────────────────────────────────────────────────────
-function UserDashboard({ navigate, lostItems, aiMatches, setSelectedMatch }) {
+function UserDashboard({ navigate, lostItems, myLostItems = [], foundItems = [], aiMatches, setSelectedMatch }) {
+  const displayLost = myLostItems.length > 0 ? myLostItems : [];
+
   return (
     <div className="p-6 space-y-6 font-[Inter,sans-serif]">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard onClick={() => navigate("user-my-reports")} icon={FileText} label="Lost Reports" value={lostItems.length.toString()} delta="+1 this week" color="bg-[#2563EB]" />
-        <StatCard onClick={() => navigate("user-my-reports")} icon={Package} label="Found Reports" value="1" color="bg-[#16A34A]" />
+        <StatCard onClick={() => navigate("user-my-reports")} icon={FileText} label="Lost Reports" value={displayLost.length.toString()} delta="Active" color="bg-[#2563EB]" />
+        <StatCard onClick={() => navigate("user-ai-matches")} icon={Package} label="System Vault" value={(foundItems || []).length.toString()} color="bg-[#16A34A]" />
         <StatCard onClick={() => navigate("user-ai-matches")} icon={Cpu} label="AI Matches" value={aiMatches.length.toString()} delta="94% best match" color="bg-[#7C3AED]" />
-        <StatCard onClick={() => navigate("user-my-reports")} icon={CheckCircle} label="Claim Status" value="Approved" color="bg-[#CA8A04]" />
+        <StatCard onClick={() => navigate("user-my-reports")} icon={CheckCircle} label="Claim Status" value="Active" color="bg-[#CA8A04]" />
       </div>
 
       {/* Quick Actions */}
@@ -911,34 +826,86 @@ function UserDashboard({ navigate, lostItems, aiMatches, setSelectedMatch }) {
       </div>
 
       {/* AI Matches Preview */}
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 space-y-4">
+        <div className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-[#111827]">Recent AI Matches</h2>
-            <p className="text-xs text-[#6B7280]">Items our AI has identified as potential matches</p>
+            <p className="text-xs text-[#6B7280]">AI-driven similarity matches linking your reported lost items with vault inventory</p>
           </div>
-          <button onClick={() => navigate("user-ai-matches")} className="text-xs text-[#2563EB] hover:underline font-medium">View All</button>
+          <button onClick={() => navigate("user-ai-matches")} className="text-xs text-[#2563EB] hover:underline font-semibold">
+            View All Matches ({aiMatches.length})
+          </button>
         </div>
-        <div className="space-y-3">
-          {aiMatches.slice(0, 3).map((m) => (
-            <div key={m.id} className="flex items-center gap-4 p-3 rounded-xl border border-[#E5E7EB] hover:border-[#DBEAFE] hover:bg-[#F8FAFC] transition-all">
-              <img src={m.img} alt={m.lostItem} className="w-12 h-12 rounded-xl object-cover bg-[#F3F4F6]" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[#111827] truncate">{m.lostItem}</p>
-                <p className="text-xs text-[#6B7280]">{m.station} · {m.date}</p>
-              </div>
-              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${confidenceColor(m.score)}`}>{m.score}% match</span>
-              <button
-                onClick={() => {
-                  setSelectedMatch(m);
-                  navigate("user-match-detail");
-                }}
-                className="text-xs font-medium text-[#2563EB] hover:underline whitespace-nowrap"
-              >
-                View
-              </button>
+
+        <div className="space-y-4">
+          {aiMatches.length === 0 ? (
+            <div className="bg-[#F8FAFC] rounded-xl border border-[#E5E7EB] p-8 text-center">
+              <Cpu size={28} className="text-[#9CA3AF] mx-auto mb-2" />
+              <p className="text-sm font-semibold text-[#111827]">No AI matches yet.</p>
+              <p className="text-xs text-[#6B7280] mt-1 max-w-md mx-auto">
+                AI matches appear automatically when our system finds a potential match between your reported lost item and a registered found item.
+              </p>
             </div>
-          ))}
+          ) : (
+            aiMatches.slice(0, 3).map((m) => (
+              <div key={m.id} className="border border-[#E5E7EB] rounded-2xl p-4 bg-white hover:border-[#DBEAFE] hover:bg-[#F8FAFC] transition-all space-y-3">
+                <div className="flex items-center justify-between gap-3 border-b border-[#F3F4F6] pb-3">
+                  <div className="flex items-center gap-2">
+                    <Cpu size={16} className="text-[#2563EB]" />
+                    <span className="text-xs font-bold text-[#1E3A8A] bg-[#EFF6FF] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      AI Similarity Match #{m.id}
+                    </span>
+                  </div>
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${confidenceColor(m.score)}`}>
+                    {m.score}% Similarity
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Left: User's Lost Item */}
+                  <div className="bg-[#F8FAFC] p-3 rounded-xl border border-[#F1F5F9]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">Your Lost Item</p>
+                    <p className="text-sm font-bold text-[#111827] mt-0.5">{m.lostItemName || m.lostItem}</p>
+                    <p className="text-xs text-[#4B5563] mt-1 line-clamp-1">{m.lostItemDescription || "No lost item notes"}</p>
+                  </div>
+
+                  {/* Right: Matched Found Item */}
+                  <div className="bg-[#F0FDF4] p-3 rounded-xl border border-[#DCFCE7]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#15803D]">Matched Found Item</p>
+                    <p className="text-sm font-bold text-[#111827] mt-0.5">{m.foundItemName || m.foundItem}</p>
+                    <p className="text-xs text-[#4B5563] mt-1 line-clamp-1">{m.foundItemDescription || "No description provided."}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 text-xs text-[#6B7280] flex-wrap gap-2">
+                  <div className="flex items-center gap-4">
+                    <span><strong className="text-[#374151]">Found at:</strong> {m.station}</span>
+                    <span><strong className="text-[#374151]">Date:</strong> {m.date}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedMatch(m);
+                        navigate("user-match-detail");
+                      }}
+                      className="px-3 py-1.5 border border-[#D1D5DB] text-[#4B5563] text-xs font-medium rounded-lg hover:bg-white transition-colors"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (setSelectedMatch) setSelectedMatch(m);
+                        navigate("user-claim-verify");
+                      }}
+                      className="px-3 py-1.5 bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                    >
+                      <Shield size={14} /> Claim This Item
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -949,35 +916,41 @@ function UserDashboard({ navigate, lostItems, aiMatches, setSelectedMatch }) {
           <button onClick={() => navigate("user-my-reports")} className="text-xs text-[#2563EB] hover:underline font-medium">View All</button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[#E5E7EB]">
-                {["Item", "Category", "Station", "Date", "Status", "AI Match"].map((h) => (
-                  <th key={h} className="text-left text-xs font-semibold text-[#6B7280] pb-3 pr-4">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F3F4F6]">
-              {lostItems.slice(0, 4).map((item) => (
-                <tr key={item.id} className="hover:bg-[#F8FAFC] transition-colors">
-                  <td className="py-3 pr-4 font-medium text-[#111827]">{item.item}</td>
-                  <td className="py-3 pr-4 text-[#6B7280]">{item.category}</td>
-                  <td className="py-3 pr-4 text-[#6B7280]">{item.station}</td>
-                  <td className="py-3 pr-4 text-[#6B7280]">{item.date}</td>
-                  <td className="py-3 pr-4">
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColor(item.status)}`}>{item.status}</span>
-                  </td>
-                  <td className="py-3">
-                    {item.match ? (
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${confidenceColor(item.match)}`}>{item.match}%</span>
-                    ) : (
-                      <span className="text-[#9CA3AF] text-xs">—</span>
-                    )}
-                  </td>
+          {displayLost.length === 0 ? (
+            <div className="text-center py-6 text-[#6B7280]">
+              <p className="text-xs">You have not reported any lost items yet.</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#E5E7EB]">
+                  {["Item", "Category", "Station", "Date", "Status", "AI Match"].map((h) => (
+                    <th key={h} className="text-left text-xs font-semibold text-[#6B7280] pb-3 pr-4">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[#F3F4F6]">
+                {displayLost.slice(0, 4).map((item) => (
+                  <tr key={item.id} className="hover:bg-[#F8FAFC] transition-colors">
+                    <td className="py-3 pr-4 font-medium text-[#111827]">{item.item || item.title}</td>
+                    <td className="py-3 pr-4 text-[#6B7280]">{item.category}</td>
+                    <td className="py-3 pr-4 text-[#6B7280]">{item.station || item.location}</td>
+                    <td className="py-3 pr-4 text-[#6B7280]">{item.date}</td>
+                    <td className="py-3 pr-4">
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColor(item.status)}`}>{item.status}</span>
+                    </td>
+                    <td className="py-3">
+                      {item.match ? (
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${confidenceColor(item.match)}`}>{item.match}%</span>
+                      ) : (
+                        <span className="text-[#9CA3AF] text-xs">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
@@ -990,6 +963,7 @@ function ReportLostPage({ navigate, addLostItem }) {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
 
   const [formData, setFormData] = useState({
     item: "",
@@ -1003,27 +977,38 @@ function ReportLostPage({ navigate, addLostItem }) {
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      setImagePreview(url);
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
       toast.success(`Selected image: ${file.name}`);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.item || !formData.category || !formData.station || !formData.date) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      addLostItem({
-        ...formData,
-        status: aiEnabled ? "Searching" : "Pending",
-        match: aiEnabled ? 92 : null,
-        reporter: "Priya Sharma",
-        userEmail: "priya@gmail.com"
-      });
+    try {
+      const requestData = {
+        title: formData.item,
+        category: formData.category,
+        dateLost: formData.date,
+        locationLost: formData.station,
+        description: formData.desc || formData.item,
+        file: imageFile
+      };
+      const createdItem = await createLostItemApi(requestData);
+      addLostItem(createdItem);
       toast.success("Lost Item Report registered successfully!");
       setSubmitted(true);
-    }, 1200);
+    } catch (err) {
+      console.error("Failed to report lost item:", err);
+      toast.error(err.response?.data?.message || "Failed to submit report.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (submitted) {
@@ -1037,7 +1022,7 @@ function ReportLostPage({ navigate, addLostItem }) {
           <p className="text-[#6B7280] mb-6">Your lost item report has been registered. AI matching is running in the background.</p>
           <div className="flex gap-3">
             <button onClick={() => navigate("user-ai-matches")} className="flex-1 bg-[#2563EB] text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-[#1D4ED8] transition-colors">View AI Matches</button>
-            <button onClick={() => setSubmitted(false)} className="flex-1 border border-[#D1D5DB] text-[#6B7280] font-medium py-2.5 rounded-xl text-sm hover:bg-[#F9FAFB] transition-colors">New Report</button>
+            <button onClick={() => { setSubmitted(false); setImageFile(null); setImagePreview(null); }} className="flex-1 border border-[#D1D5DB] text-[#6B7280] font-medium py-2.5 rounded-xl text-sm hover:bg-[#F9FAFB] transition-colors">New Report</button>
           </div>
         </div>
       </div>
@@ -1055,22 +1040,11 @@ function ReportLostPage({ navigate, addLostItem }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-[#111827] mb-1.5">Item Name *</label>
-              <input
-                required
-                value={formData.item}
-                onChange={(e) => setFormData({ ...formData, item: e.target.value })}
-                placeholder="e.g. Black Trolley Bag"
-                className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all"
-              />
+              <input required value={formData.item} onChange={(e) => setFormData({ ...formData, item: e.target.value })} placeholder="e.g. Black Trolley Bag" className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all" />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#111827] mb-1.5">Category *</label>
-              <select
-                required
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all"
-              >
+              <select required value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all">
                 <option value="">Select category</option>
                 {INITIAL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -1079,45 +1053,23 @@ function ReportLostPage({ navigate, addLostItem }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-[#111827] mb-1.5">Lost Date *</label>
-              <input
-                type="date"
-                required
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all"
-              />
+              <input type="date" required value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all" />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#111827] mb-1.5">Lost Time</label>
-              <input
-                type="time"
-                value={formData.time}
-                onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-                className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all"
-              />
+              <input type="time" value={formData.time} onChange={(e) => setFormData({ ...formData, time: e.target.value })} className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-[#111827] mb-1.5">Station / Bus Stand *</label>
-            <select
-              required
-              value={formData.station}
-              onChange={(e) => setFormData({ ...formData, station: e.target.value })}
-              className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all"
-            >
-              <option value="">Select station</option>
+            <select required value={formData.station} onChange={(e) => setFormData({ ...formData, station: e.target.value })} className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all">
+              <option value="">Select location</option>
               {INITIAL_STATIONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-[#111827] mb-1.5">Description</label>
-            <textarea
-              rows={3}
-              value={formData.desc}
-              onChange={(e) => setFormData({ ...formData, desc: e.target.value })}
-              placeholder="Describe the item in detail — color, brand, distinguishing marks…"
-              className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all resize-none"
-            />
+            <label className="block text-sm font-medium text-[#111827] mb-1.5">Item Description</label>
+            <textarea rows={3} value={formData.desc} onChange={(e) => setFormData({ ...formData, desc: e.target.value })} placeholder="Describe the item in detail" className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all resize-none" />
           </div>
           <div>
             <label className="block text-sm font-medium text-[#111827] mb-1.5">Upload Images</label>
@@ -1129,29 +1081,9 @@ function ReportLostPage({ navigate, addLostItem }) {
                   <span className="text-xs text-[#2563EB] font-medium">Click to change photo</span>
                 </div>
               ) : (
-                <>
-                  <Upload size={24} className="text-[#9CA3AF] mx-auto mb-2" />
-                  <p className="text-sm text-[#6B7280]">Drop images here or <span className="text-[#2563EB] font-medium">browse</span></p>
-                  <p className="text-xs text-[#9CA3AF] mt-1">PNG, JPG up to 10MB each</p>
-                </>
+                <><Upload size={24} className="text-[#9CA3AF] mx-auto mb-2" /><p className="text-sm text-[#6B7280]">Drop images here or browse</p></>
               )}
             </label>
-          </div>
-          <div className="flex items-center justify-between p-4 bg-[#EFF6FF] rounded-xl border border-[#DBEAFE]">
-            <div className="flex items-center gap-3">
-              <Cpu size={18} className="text-[#2563EB]" />
-              <div>
-                <p className="text-sm font-medium text-[#111827]">Enable AI Matching</p>
-                <p className="text-xs text-[#6B7280]">Automatically scan found items for a match</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setAiEnabled(!aiEnabled)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${aiEnabled ? "bg-[#2563EB]" : "bg-[#D1D5DB]"}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${aiEnabled ? "translate-x-5" : ""}`} />
-            </button>
           </div>
           <button type="submit" disabled={loading} className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
             {loading ? <><RefreshCw size={15} className="animate-spin" /> Submitting…</> : "Submit Report"}
@@ -1167,6 +1099,7 @@ function ReportFoundPage({ addFoundItem }) {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -1181,24 +1114,39 @@ function ReportFoundPage({ addFoundItem }) {
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
+      setImageFile(file);
       setImagePreview(URL.createObjectURL(file));
       toast.success(`Photo selected: ${file.name}`);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.name || !formData.category || !formData.date) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      addFoundItem({
-        ...formData,
-        status: "Available",
-        img: imagePreview || "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=120&h=120&fit=crop&auto=format"
-      });
+    try {
+      const requestData = {
+        title: formData.name,
+        category: formData.category,
+        dateFound: formData.date,
+        locationFound: formData.station || formData.location || "Station",
+        description: formData.desc || formData.name,
+        file: imageFile
+      };
+      const createdItem = await createFoundItemApi(requestData);
+      addFoundItem(createdItem);
       toast.success("Found item logged successfully!");
       setSubmitted(true);
-    }, 1000);
+    } catch (err) {
+      console.error("Failed to report found item:", err);
+      const serverMsg = err.response?.data?.message || "Failed to register found item. Please check input parameters.";
+      toast.error(serverMsg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (submitted) {
@@ -1210,7 +1158,7 @@ function ReportFoundPage({ addFoundItem }) {
           </div>
           <h2 className="text-xl font-bold text-[#111827] mb-2">Item Registered!</h2>
           <p className="text-[#6B7280] mb-6">The found item has been registered and will appear in the system for owner matching.</p>
-          <button onClick={() => setSubmitted(false)} className="bg-[#16A34A] text-white font-semibold py-2.5 px-6 rounded-xl text-sm hover:bg-[#15803D] transition-colors">Register Another</button>
+          <button onClick={() => { setSubmitted(false); setImageFile(null); setImagePreview(null); }} className="bg-[#16A34A] text-white font-semibold py-2.5 px-6 rounded-xl text-sm hover:bg-[#15803D] transition-colors">Register Another</button>
         </div>
       </div>
     );
@@ -1317,136 +1265,432 @@ function ReportFoundPage({ addFoundItem }) {
   );
 }
 
-// ─── AI MATCHES PAGE ──────────────────────────────────────────────────────────
-function AIMatchesPage({ navigate, aiMatches, setSelectedMatch, dismissMatch }) {
+// ─── AI MATCHES & SYSTEM VAULT PAGE ──────────────────────────────────────────
+function AIMatchesPage({ navigate, aiMatches = [], foundItems = [], setSelectedMatch, dismissMatch, role, globalSearch = "" }) {
+  const [activeTab, setActiveTab] = useState("vault");
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [filterConf, setFilterConf] = useState("all");
   const [isScanning, setIsScanning] = useState(false);
 
-  const filteredMatches = aiMatches.filter((m) => {
-    const matchQuery = m.lostItem.toLowerCase().includes(search.toLowerCase()) ||
-                       m.station.toLowerCase().includes(search.toLowerCase());
-    const matchConf = filterConf === "all" ? true : m.confidence === filterConf;
+  useEffect(() => {
+    fetchMatches();
+  }, []);
+
+  const fetchMatches = async () => {
+    setLoading(true);
+    try {
+      const data = await getMatchesForUserApi();
+      setMatches(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load user matches:", err);
+      setMatches([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const safeFoundItems = Array.isArray(foundItems) ? foundItems : [];
+
+  const enrichMatch = (m) => {
+    if (!m) return null;
+    const foundObj = safeFoundItems.find(i => String(i.id) === String(m.foundItemId));
+
+    const lName = m.lostItemName || m.lostItem || `Lost Item #${m.lostItemId}`;
+    const fName = m.foundItemName || m.foundItem || foundObj?.title || foundObj?.name || foundObj?.item || `Found Item #${m.foundItemId}`;
+    const lDesc = m.lostItemDescription || "No lost item notes provided.";
+    const fDesc = m.foundItemDescription || foundObj?.description || foundObj?.desc || "No description provided.";
+    const lCategory = m.lostItemCategory || "General";
+    const fCategory = m.foundItemCategory || foundObj?.category || "General";
+    const lLocation = m.lostItemLocation || "Reported Location";
+    const fStation = m.foundItemStation || m.station || foundObj?.location || foundObj?.station || "Station Vault";
+
+    // Explicitly resolve Lost Item Image (always belongs to lostItemId) vs Found Item Image (always belongs to foundItemId)
+    const lImg = m.lostItemImg || (m.lostItemId ? getImageUrl(`/api/items/images/${m.lostItemId}`) : null);
+    const fImg = m.foundItemImg || m.img || m.imageUrl || foundObj?.img || foundObj?.imageUrl || (m.foundItemId ? getImageUrl(`/api/items/images/${m.foundItemId}`) : null);
+
+    const lReporter = m.lostItemReporter || (m.reportedBy ? `Passenger #${m.reportedBy}` : "Passenger");
+    const fReporter = m.foundItemReporter || (foundObj?.reportedBy ? `Staff #${foundObj.reportedBy}` : "Station Staff");
+
+    const rawScore = m.score != null ? m.score : (m.similarityScore != null ? (m.similarityScore <= 1 ? Math.round(m.similarityScore * 100) : Math.round(m.similarityScore)) : 85);
+    let confidence = "low";
+    if (rawScore >= 90) confidence = "high";
+    else if (rawScore >= 80) confidence = "medium";
+
+    return {
+      ...m,
+      id: m.id,
+      lostItemId: m.lostItemId,
+      foundItemId: m.foundItemId,
+      lostItem: lName,
+      lostItemName: lName,
+      lostItemDescription: lDesc,
+      lostItemCategory: lCategory,
+      lostItemLocation: lLocation,
+      lostItemImg: lImg,
+      lostItemReporter: lReporter,
+      foundItem: fName,
+      foundItemName: fName,
+      foundItemDescription: fDesc,
+      foundItemCategory: fCategory,
+      foundItemStation: fStation,
+      foundItemImg: fImg,
+      foundItemReporter: fReporter,
+      station: fStation,
+      img: fImg,
+      imageUrl: fImg,
+      score: rawScore,
+      confidence: confidence,
+      date: formatDateForUI(m.createdAt || new Date().toISOString()),
+      createdAt: m.createdAt,
+      rawStatus: m.status || "PENDING",
+    };
+  };
+
+  const rawDisplayMatches = (matches && matches.length > 0) ? matches : (aiMatches || []);
+  const enrichedMatches = rawDisplayMatches.map(enrichMatch).filter(Boolean);
+
+  // Deduplicate AI matches by relationship pair (lostItemId + "_" + foundItemId)
+  const uniqueMatchesMap = new Map();
+  enrichedMatches.forEach((m) => {
+    if (!m || !m.lostItemId || !m.foundItemId) return;
+    const pairKey = `${m.lostItemId}_${m.foundItemId}`;
+    if (!uniqueMatchesMap.has(pairKey)) {
+      uniqueMatchesMap.set(pairKey, m);
+    }
+  });
+  const displayMatches = Array.from(uniqueMatchesMap.values());
+
+  const filteredMatches = displayMatches.filter((m) => {
+    if (!m) return false;
+    const q = (search || globalSearch || "").toLowerCase();
+    const matchQuery = (m.lostItem || m.lostItemName || "").toLowerCase().includes(q) ||
+                       (m.foundItem || m.foundItemName || "").toLowerCase().includes(q) ||
+                       (m.station || m.foundItemStation || "").toLowerCase().includes(q) ||
+                       (m.lostItemCategory || m.foundItemCategory || "").toLowerCase().includes(q);
+    const matchConf = filterConf === "all" ? true : String(m.confidence || "").toLowerCase() === filterConf.toLowerCase();
     return matchQuery && matchConf;
   });
 
-  const handleRescan = () => {
+  const uniqueFoundItems = Array.from(new Map(safeFoundItems.map((item) => [item?.id || Math.random(), item])).values());
+
+  const filteredFoundItems = uniqueFoundItems.filter((item) => {
+    if (!item) return false;
+    const q = (search || globalSearch || "").toLowerCase();
+    return (item.title || item.name || item.item || "").toLowerCase().includes(q) ||
+           (item.category || "").toLowerCase().includes(q) ||
+           (item.location || item.station || "").toLowerCase().includes(q) ||
+           (item.description || item.desc || "").toLowerCase().includes(q);
+  });
+
+  const handleRescan = async () => {
     setIsScanning(true);
-    setTimeout(() => {
+    try {
+      const newMatches = await triggerMatchRescanApi();
+      if (newMatches && Array.isArray(newMatches)) {
+        setMatches(newMatches);
+      } else {
+        await fetchMatches();
+      }
+      toast.success("AI Rescan completed across system!");
+    } catch (err) {
+      console.error("Rescan failed:", err);
+      toast.error(err.response?.data?.message || "Failed to complete AI rescan");
+    } finally {
       setIsScanning(false);
-      toast.success("AI Rescan completed across 200+ stations!");
-    }, 1000);
+    }
+  };
+
+  const handleAcceptMatch = async (match) => {
+    try {
+      await updateMatchStatusApi(match.id, "CONFIRMED");
+      toast.success(`Match #${match.id} CONFIRMED! Lost item linked with Found item.`);
+      setMatches(prev => prev.filter(item => item.id !== match.id && `${item.lostItemId}_${item.foundItemId}` !== `${match.lostItemId}_${match.foundItemId}`));
+      if (dismissMatch) dismissMatch(match.id, "CONFIRMED");
+    } catch (err) {
+      toast.error("Failed to confirm match");
+    }
+  };
+
+  const handleRejectMatch = async (match) => {
+    try {
+      await updateMatchStatusApi(match.id, "REJECTED");
+      toast.info(`Match #${match.id} rejected.`);
+      setMatches(prev => prev.filter(item => item.id !== match.id && `${item.lostItemId}_${item.foundItemId}` !== `${match.lostItemId}_${match.foundItemId}`));
+      if (dismissMatch) dismissMatch(match.id, "REJECTED");
+    } catch (err) {
+      toast.error("Failed to reject match");
+    }
   };
 
   return (
     <div className="p-6 space-y-6 font-[Inter,sans-serif]">
-      <div className="bg-[#EFF6FF] border border-[#DBEAFE] rounded-2xl p-4 flex items-center gap-3">
-        <div className="w-9 h-9 bg-[#2563EB] rounded-xl flex items-center justify-center shrink-0">
-          <Cpu size={16} className="text-white" />
+      {/* Header Banner */}
+      <div className="bg-[#EFF6FF] border border-[#DBEAFE] rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-[#2563EB] rounded-xl flex items-center justify-center shrink-0">
+            <Package size={18} className="text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-[#1D4ED8]">System Vault &amp; Found Items Repository</p>
+            <p className="text-xs text-[#2563EB]">Search all registered found items in the vault to identify and claim your missing belongings.</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-semibold text-[#1D4ED8]">AI Analysis Complete</p>
-          <p className="text-xs text-[#2563EB]">{aiMatches.length} potential matches found across 200+ stations</p>
-        </div>
-        <div className="ml-auto text-right">
-          <p className="text-xs text-[#6B7280]">Last scan</p>
-          <p className="text-xs font-medium text-[#111827]">Just now</p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab("vault")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${activeTab === "vault" ? "bg-[#2563EB] text-white" : "bg-white text-[#6B7280] border border-[#D1D5DB]"}`}
+          >
+            System Vault ({foundItems.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("ai")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${activeTab === "ai" ? "bg-[#7C3AED] text-white" : "bg-white text-[#6B7280] border border-[#D1D5DB]"}`}
+          >
+            AI Matches ({displayMatches.length})
+          </button>
         </div>
       </div>
 
+      {/* Control Bar */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h2 className="font-semibold text-[#111827]">AI Match Results</h2>
+        <h2 className="font-semibold text-[#111827]">
+          {activeTab === "vault" ? "System Vault Repository" : "AI Match Results"}
+        </h2>
         <div className="flex items-center gap-3">
           <div className="relative">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search matches…"
-              className="pl-8 pr-3 py-1.5 text-xs border border-[#D1D5DB] rounded-lg outline-none focus:border-[#2563EB] w-48"
+              placeholder={activeTab === "vault" ? "Search found items in vault…" : "Search AI matches…"}
+              className="pl-8 pr-3 py-1.5 text-xs border border-[#D1D5DB] rounded-lg outline-none focus:border-[#2563EB] w-56"
             />
             <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
           </div>
 
-          <select
-            value={filterConf}
-            onChange={(e) => setFilterConf(e.target.value)}
-            className="px-3 py-1.5 text-xs border border-[#D1D5DB] rounded-lg text-[#6B7280] bg-white outline-none"
-          >
-            <option value="all">All Confidence</option>
-            <option value="high">High Confidence (90%+)</option>
-            <option value="medium">Medium Confidence (80%+)</option>
-            <option value="low">Low Confidence (&lt;80%)</option>
-          </select>
+          {activeTab === "ai" && (
+            <>
+              <select
+                value={filterConf}
+                onChange={(e) => setFilterConf(e.target.value)}
+                className="px-3 py-1.5 text-xs border border-[#D1D5DB] rounded-lg text-[#6B7280] bg-white outline-none"
+              >
+                <option value="all">All Confidence</option>
+                <option value="high">High Confidence (90%+)</option>
+                <option value="medium">Medium Confidence (80%+)</option>
+                <option value="low">Low Confidence (&lt;80%)</option>
+              </select>
 
-          <button
-            onClick={handleRescan}
-            disabled={isScanning}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#D1D5DB] rounded-lg text-[#6B7280] hover:bg-[#F9FAFB] transition-colors"
-          >
-            <RefreshCw size={12} className={isScanning ? "animate-spin" : ""} />
-            {isScanning ? "Scanning…" : "Rescan"}
-          </button>
+              <button
+                onClick={handleRescan}
+                disabled={isScanning}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#D1D5DB] rounded-lg text-[#6B7280] hover:bg-[#F9FAFB] transition-colors"
+              >
+                <RefreshCw size={12} className={isScanning ? "animate-spin" : ""} />
+                {isScanning ? "Scanning…" : "Rescan"}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {filteredMatches.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
-          <Cpu size={32} className="text-[#D1D5DB] mx-auto mb-3" />
-          <p className="text-[#111827] font-semibold text-base">No matches found</p>
-          <p className="text-xs text-[#6B7280] mt-1">Try adjusting your filters or rescanning</p>
+      {/* SYSTEM VAULT REPOSITORY TAB */}
+      {activeTab === "vault" && (
+        <div>
+          {filteredFoundItems.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
+              <Package size={32} className="text-[#D1D5DB] mx-auto mb-3" />
+              <p className="text-[#111827] font-semibold text-base">No items found in System Vault</p>
+              <p className="text-xs text-[#6B7280] mt-1">Try adjusting your search terms or check back later.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredFoundItems.map((item) => (
+                <div key={item.id} className="bg-white rounded-2xl border border-[#E5E7EB] p-5 hover:shadow-md transition-all flex flex-col justify-between">
+                  <div>
+                    {item.img || item.imageUrl ? (
+                      <img src={item.img || item.imageUrl} alt={item.title} className="w-full h-36 object-cover rounded-xl mb-3 bg-[#F3F4F6]" />
+                    ) : (
+                      <div className="w-full h-36 bg-[#F8FAFC] border border-dashed border-[#E5E7EB] rounded-xl mb-3 flex items-center justify-center text-[#9CA3AF]">
+                        <Package size={28} />
+                      </div>
+                    )}
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-[#111827] text-sm truncate">{item.title || item.name || item.item}</h3>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#EFF6FF] text-[#2563EB] shrink-0">
+                        {item.category}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#6B7280] mt-1 line-clamp-2">{item.description || item.desc || "Item registered in station vault."}</p>
+                    <div className="flex items-center gap-3 text-xs text-[#6B7280] mt-3 flex-wrap">
+                      <div className="flex items-center gap-1"><MapPin size={12} /> {item.location || item.station}</div>
+                      <div className="flex items-center gap-1"><Calendar size={12} /> {item.date}</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedMatch({
+                        foundItemId: item.id,
+                        id: item.id,
+                        title: item.title || item.name || item.item,
+                        item: item.title || item.name || item.item,
+                        category: item.category,
+                        location: item.location || item.station,
+                        station: item.location || item.station,
+                        description: item.description || item.desc
+                      });
+                      navigate("user-claim-verify");
+                    }}
+                    className="mt-4 w-full bg-[#16A34A] hover:bg-[#15803D] text-white py-2 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Shield size={14} /> Claim This Item
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="grid gap-4">
-          {filteredMatches.map((m) => (
-            <div key={m.id} className="bg-white rounded-2xl border border-[#E5E7EB] p-5 hover:shadow-md transition-all">
-              <div className="flex items-start gap-4">
-                <img src={m.img} alt={m.lostItem} className="w-20 h-20 rounded-xl object-cover bg-[#F3F4F6] shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 flex-wrap">
-                    <div>
-                      <p className="font-semibold text-[#111827]">{m.lostItem}</p>
-                      <p className="text-sm text-[#6B7280] mt-0.5">Match: {m.foundItem}</p>
+      )}
+
+      {/* AI MATCHES TAB */}
+      {activeTab === "ai" && (
+        <div>
+          {filteredMatches.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
+              <Cpu size={32} className="text-[#D1D5DB] mx-auto mb-3" />
+              <p className="text-[#111827] font-semibold text-base">No AI matches generated yet</p>
+              <p className="text-xs text-[#6B7280] mt-1">Check the System Vault tab above to manually search all registered found items.</p>
+            </div>
+          ) : (
+            <div className="grid gap-5">
+              {filteredMatches.map((m) => (
+                <div key={m.id || `${m.lostItemId}_${m.foundItemId}`} className="bg-white rounded-2xl border border-[#E5E7EB] p-5 hover:shadow-md transition-all space-y-4 font-[Inter,sans-serif]">
+                  {/* Header Bar */}
+                  <div className="flex items-center justify-between gap-3 border-b border-[#F3F4F6] pb-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Cpu size={16} className="text-[#2563EB]" />
+                      <span className="text-xs font-bold text-[#1E3A8A] bg-[#EFF6FF] px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        AI Match #{m.id}
+                      </span>
+                      <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${m.confidence === "high" ? "bg-green-100 text-green-700" : m.confidence === "medium" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
+                        {m.confidence === "high" ? "High Confidence" : m.confidence === "medium" ? "Medium Confidence" : "Low Confidence"}
+                      </span>
                     </div>
-                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${confidenceColor(m.score)}`}>{m.score}% match</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold px-3 py-1 rounded-full ${confidenceColor(m.score)}`}>
+                        {m.score}% Similarity
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4 mt-3 flex-wrap">
-                    <div className="flex items-center gap-1.5 text-xs text-[#6B7280]">
-                      <MapPin size={12} /> {m.station}
+
+                  {/* Dual Comparison Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Left Column: Reported Lost Item */}
+                    <div className="bg-[#F8FAFC] p-4 rounded-xl border border-[#E2E8F0] space-y-2 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#2563EB] bg-[#EFF6FF] px-2 py-0.5 rounded">
+                            Reported Lost Item #{m.lostItemId}
+                          </span>
+                          <span className="text-[10px] text-[#6B7280] font-medium">{m.lostItemCategory}</span>
+                        </div>
+                        {m.lostItemImg ? (
+                          <img src={m.lostItemImg} alt={m.lostItemName} className="w-full h-36 object-cover rounded-lg bg-[#E2E8F0] mb-2" />
+                        ) : (
+                          <div className="w-full h-36 bg-[#E2E8F0] rounded-lg flex items-center justify-center text-[#9CA3AF] mb-2">
+                            <Package size={28} />
+                          </div>
+                        )}
+                        <h4 className="font-bold text-[#111827] text-sm">{m.lostItemName}</h4>
+                        <p className="text-xs text-[#4B5563] mt-1 line-clamp-2">{m.lostItemDescription}</p>
+                      </div>
+                      <div className="pt-2 border-t border-[#E2E8F0] flex items-center justify-between text-[11px] text-[#6B7280] flex-wrap gap-1">
+                        <span><MapPin size={11} className="inline mr-0.5 text-[#2563EB]" /> {m.lostItemLocation}</span>
+                        <span><User size={11} className="inline mr-0.5 text-[#2563EB]" /> {m.lostItemReporter}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs text-[#6B7280]">
-                      <Calendar size={12} /> {m.date}
+
+                    {/* Right Column: Matched Found Item in Vault */}
+                    <div className="bg-[#F0FDF4] p-4 rounded-xl border border-[#DCFCE7] space-y-2 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#15803D] bg-[#DCFCE7] px-2 py-0.5 rounded">
+                            Found Vault Item #{m.foundItemId}
+                          </span>
+                          <span className="text-[10px] text-[#15803D] font-medium">{m.foundItemCategory}</span>
+                        </div>
+                        {m.foundItemImg ? (
+                          <img src={m.foundItemImg} alt={m.foundItemName} className="w-full h-36 object-cover rounded-lg bg-[#DCFCE7] mb-2" />
+                        ) : (
+                          <div className="w-full h-36 bg-[#DCFCE7] rounded-lg flex items-center justify-center text-[#86EFAC] mb-2">
+                            <Package size={28} />
+                          </div>
+                        )}
+                        <h4 className="font-bold text-[#111827] text-sm">{m.foundItemName}</h4>
+                        <p className="text-xs text-[#4B5563] mt-1 line-clamp-2">{m.foundItemDescription}</p>
+                      </div>
+                      <div className="pt-2 border-t border-[#DCFCE7] flex items-center justify-between text-[11px] text-[#15803D] flex-wrap gap-1">
+                        <span><MapPin size={11} className="inline mr-0.5 text-[#16A34A]" /> {m.foundItemStation}</span>
+                        <span><User size={11} className="inline mr-0.5 text-[#16A34A]" /> {m.foundItemReporter}</span>
+                      </div>
                     </div>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${m.confidence === "high" ? "bg-green-100 text-green-700" : m.confidence === "medium" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
-                      {m.confidence === "high" ? "High Confidence" : m.confidence === "medium" ? "Medium Confidence" : "Low Confidence"}
-                    </span>
                   </div>
-                  <div className="mt-3 w-full bg-[#F3F4F6] rounded-full h-1.5">
-                    <div className={`h-1.5 rounded-full ${m.score >= 90 ? "bg-[#16A34A]" : m.score >= 80 ? "bg-[#CA8A04]" : "bg-[#DC2626]"}`} style={{ width: `${m.score}%` }} />
+
+                  {/* Actions & Progress Bar */}
+                  <div className="space-y-3">
+                    <div className="w-full bg-[#F3F4F6] rounded-full h-1.5">
+                      <div className={`h-1.5 rounded-full ${m.score >= 90 ? "bg-[#16A34A]" : m.score >= 80 ? "bg-[#CA8A04]" : "bg-[#DC2626]"}`} style={{ width: `${m.score}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between gap-3 pt-2 border-t border-[#F3F4F6] flex-wrap">
+                      <div className="text-xs text-[#6B7280] flex items-center gap-1">
+                        <Calendar size={12} /> Registered: {m.date}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {role === "staff" || role === "admin" ? (
+                          <>
+                            <button
+                              onClick={() => handleAcceptMatch(m)}
+                              className="bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
+                            >
+                              <Check size={14} /> Accept Match
+                            </button>
+                            <button
+                              onClick={() => handleRejectMatch(m)}
+                              className="border border-[#D1D5DB] text-[#DC2626] hover:bg-[#FEE2E2] text-xs font-medium px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+                            >
+                              <X size={14} /> Reject
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                if (setSelectedMatch) setSelectedMatch(m);
+                                navigate("user-claim-verify");
+                              }}
+                              className="bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-semibold px-5 py-2 rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
+                            >
+                              <Shield size={14} /> Claim This Item
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (setSelectedMatch) setSelectedMatch(m);
+                                navigate("user-match-detail");
+                              }}
+                              className="px-3.5 py-2 border border-[#D1D5DB] text-xs text-[#2563EB] hover:bg-[#EFF6FF] rounded-xl transition-colors font-medium"
+                            >
+                              Details
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-[#F3F4F6]">
-                <button
-                  onClick={() => {
-                    setSelectedMatch(m);
-                    navigate("user-match-detail");
-                  }}
-                  className="flex-1 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-sm font-semibold py-2 rounded-xl transition-colors"
-                >
-                  View Details
-                </button>
-                <button
-                  onClick={() => {
-                    dismissMatch(m.id);
-                    toast.info("Match dismissed");
-                  }}
-                  className="px-4 py-2 border border-[#D1D5DB] text-sm text-[#6B7280] hover:bg-[#F9FAFB] rounded-xl transition-colors"
-                >
-                  Not My Item
-                </button>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
@@ -1455,7 +1699,21 @@ function AIMatchesPage({ navigate, aiMatches, setSelectedMatch, dismissMatch }) 
 
 // ─── MATCH DETAIL PAGE ────────────────────────────────────────────────────────
 function MatchDetailPage({ navigate, selectedMatch, setSelectedMatch }) {
-  const m = selectedMatch || INITIAL_AI_MATCHES[0];
+  if (!selectedMatch) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto space-y-5 font-[Inter,sans-serif]">
+        <button onClick={() => navigate("user-ai-matches")} className="flex items-center gap-2 text-sm text-[#6B7280] hover:text-[#111827] transition-colors">
+          <ChevronRight size={14} className="rotate-180" /> Back to matches
+        </button>
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
+          <Cpu size={32} className="text-[#D1D5DB] mx-auto mb-3" />
+          <p className="text-[#111827] font-semibold text-base">No match selected</p>
+          <p className="text-xs text-[#6B7280] mt-1">Please select an AI match from your matches page.</p>
+        </div>
+      </div>
+    );
+  }
+  const m = selectedMatch;
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-5 font-[Inter,sans-serif]">
@@ -1524,48 +1782,68 @@ function MatchDetailPage({ navigate, selectedMatch, setSelectedMatch }) {
 }
 
 // ─── CLAIM VERIFY PAGE ────────────────────────────────────────────────────────
-function ClaimVerifyPage({ navigate, selectedMatch, addClaim }) {
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+function ClaimVerifyPage({ navigate, selectedMatch, addClaim, setActiveClaim }) {
   const [loading, setLoading] = useState(false);
+  const [proofFile, setProofFile] = useState(null);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState(null);
   const [answers, setAnswers] = useState({
     color: "",
     brand: "",
     marks: "",
     contents: ""
   });
-  const refs = useRef([]);
 
-  const handleOtp = (i, v) => {
-    if (v.length > 1) return;
-    const next = [...otp];
-    next[i] = v;
-    setOtp(next);
-    if (v && i < 5) refs.current[i + 1]?.focus();
+  useEffect(() => {
+    return () => {
+      if (proofPreviewUrl) {
+        URL.revokeObjectURL(proofPreviewUrl);
+      }
+    };
+  }, [proofPreviewUrl]);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (proofPreviewUrl) URL.revokeObjectURL(proofPreviewUrl);
+      setProofFile(file);
+      setProofPreviewUrl(URL.createObjectURL(file));
+      toast.success(`Proof document attached: ${file.name}`);
+    }
   };
 
-  const handleResendOtp = () => {
-    toast.info("A new 6-digit OTP code has been sent to your mobile.");
+  const handleRemoveFile = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (proofPreviewUrl) URL.revokeObjectURL(proofPreviewUrl);
+    setProofFile(null);
+    setProofPreviewUrl(null);
+    toast.info("Attached proof document removed");
   };
 
-  const handleSubmitClaim = () => {
+  const handleSubmitClaim = async () => {
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      addClaim({
-        id: `CLM-${Math.floor(1000 + Math.random() * 9000)}`,
-        item: selectedMatch?.lostItem || "Black Samsonite Trolley Bag",
-        claimant: "Priya Sharma",
-        email: "priya@gmail.com",
-        phone: "+91 98765 43210",
-        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        station: selectedMatch?.station || "New Delhi Railway Station",
-        status: "Under Verification",
-        answers,
-        proofImg: selectedMatch?.img || "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=120&h=120&fit=crop&auto=format"
-      });
+    try {
+      const verificationProofText = `Color: ${answers.color || "N/A"}\nBrand: ${answers.brand || "N/A"}\nMarks: ${answers.marks || "N/A"}\nContents: ${answers.contents || "N/A"}`;
+      const requestData = {
+        lostItemId: selectedMatch?.lostItemId || selectedMatch?.id || 1,
+        foundItemId: selectedMatch?.foundItemId || selectedMatch?.id || 1,
+        verificationProof: verificationProofText
+      };
+      const createdClaim = await submitClaimApi(requestData, proofFile);
+      if (selectedMatch?.station || selectedMatch?.location) {
+        createdClaim.station = selectedMatch.station || selectedMatch.location;
+      }
+      if (setActiveClaim) setActiveClaim(createdClaim);
+      addClaim(createdClaim);
       toast.success("Ownership claim submitted for staff verification!");
       navigate("user-claim-success");
-    }, 1200);
+    } catch (err) {
+      console.error("Submit claim error:", err);
+      const serverMsg = err.response?.data?.message || "Failed to submit claim. Please check your details.";
+      toast.error(serverMsg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1614,29 +1892,32 @@ function ClaimVerifyPage({ navigate, selectedMatch, addClaim }) {
 
           <div>
             <label className="block text-sm font-medium text-[#111827] mb-1.5">Upload Additional Proof</label>
-            <label className="border-2 border-dashed border-[#D1D5DB] rounded-xl p-6 text-center hover:border-[#2563EB] transition-colors cursor-pointer block">
+            <label className="border-2 border-dashed border-[#D1D5DB] rounded-xl p-6 text-center hover:border-[#2563EB] transition-colors cursor-pointer block relative">
               <Upload size={20} className="text-[#9CA3AF] mx-auto mb-1" />
-              <p className="text-sm text-[#6B7280]">Purchase receipt, previous photos, etc.</p>
-              <input type="file" className="hidden" onChange={() => toast.success("Proof document uploaded!")} />
+              <p className="text-sm text-[#6B7280]">{proofFile ? `Attached: ${proofFile.name}` : "Purchase receipt, previous photos, etc."}</p>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
             </label>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[#111827] mb-1.5">OTP Verification</label>
-            <p className="text-xs text-[#6B7280] mb-3">Enter the 6-digit code sent to your registered mobile</p>
-            <div className="flex items-center gap-2">
-              {otp.map((v, i) => (
-                <input
-                  key={i}
-                  ref={(el) => (refs.current[i] = el)}
-                  value={v}
-                  onChange={(e) => handleOtp(i, e.target.value)}
-                  maxLength={1}
-                  className="w-10 h-12 text-center text-lg font-bold border border-[#D1D5DB] rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all"
-                />
-              ))}
-              <button onClick={handleResendOtp} className="ml-2 text-xs text-[#2563EB] font-medium hover:underline">Resend OTP</button>
-            </div>
+            {proofPreviewUrl && (
+              <div className="mt-3 flex items-center gap-3 bg-[#F8FAFC] border border-[#E5E7EB] p-3 rounded-xl">
+                <img src={proofPreviewUrl} alt="Proof Thumbnail" className="w-16 h-16 object-cover rounded-lg border border-[#D1D5DB]" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-[#111827] truncate">{proofFile?.name}</p>
+                  <p className="text-[10px] text-[#6B7280] mt-0.5">{(proofFile?.size / 1024).toFixed(1)} KB — Image Preview Ready</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  className="p-1.5 bg-[#FEF2F2] text-[#DC2626] hover:bg-red-100 rounded-lg transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1653,7 +1934,7 @@ function ClaimVerifyPage({ navigate, selectedMatch, addClaim }) {
 }
 
 // ─── CLAIM SUCCESS PAGE ───────────────────────────────────────────────────────
-function ClaimSuccessPage({ navigate }) {
+function ClaimSuccessPage({ navigate, activeClaim, authUser, selectedMatch }) {
   const steps = [
     { label: "Submitted", done: true },
     { label: "Under Verification", done: true },
@@ -1662,22 +1943,29 @@ function ClaimSuccessPage({ navigate }) {
   ];
 
   const handleDownloadReceipt = () => {
+    const claimIdStr = activeClaim?.id || (activeClaim?.rawId ? `CLM-${activeClaim.rawId}` : `CLM-${Date.now()}`);
+    const dateStr = activeClaim?.date || new Date().toLocaleDateString();
+    const statusStr = activeClaim?.status || "Under Verification";
+    const stationStr = activeClaim?.station || selectedMatch?.station || selectedMatch?.location || "Station Vault";
+    const userNameStr = authUser?.name || authUser?.email || "Passenger";
+
     const textContent = `SMART LOST & FOUND SYSTEM - CLAIM RECEIPT
-Claim ID: CLM-9021
-Date: ${new Date().toLocaleDateString()}
-Status: Under Verification
-Station: New Delhi Railway Station
-User: Priya Sharma
+Claim ID: ${claimIdStr}
+Date: ${dateStr}
+Status: ${statusStr}
+Station: ${stationStr}
+User: ${userNameStr}
 
 Please present this receipt along with a valid Govt photo ID at the station Lost & Found counter.`;
     const blob = new Blob([textContent], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "Smart-LF-Claim-Receipt.txt";
+    a.download = `Smart-LF-Receipt-${claimIdStr}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    URL.revokeObjectURL(url);
     toast.success("Receipt downloaded successfully!");
   };
 
@@ -1716,18 +2004,35 @@ Please present this receipt along with a valid Govt photo ID at the station Lost
 }
 
 // ─── MY REPORTS PAGE ──────────────────────────────────────────────────────────
-function MyReportsPage({ lostItems, openModal }) {
+function MyReportsPage({ myLostItems = [], openModal }) {
+  const [myItems, setMyItems] = useState(myLostItems);
   const [tab, setTab] = useState("All");
   const [search, setSearch] = useState("");
   const tabs = ["All", "Active", "Matched", "Pending", "Closed"];
 
-  const filtered = lostItems.filter((r) => {
-    const q = r.item.toLowerCase().includes(search.toLowerCase()) || r.station.toLowerCase().includes(search.toLowerCase());
+  useEffect(() => {
+    const fetchMyReports = async () => {
+      try {
+        const reports = await getMyLostItemsApi();
+        setMyItems(Array.isArray(reports) ? reports : []);
+      } catch (err) {
+        console.error("Failed to fetch my lost reports:", err);
+        setMyItems(myLostItems);
+      }
+    };
+    fetchMyReports();
+  }, []);
+
+  const itemsToDisplay = myItems;
+
+  const filtered = itemsToDisplay.filter((r) => {
+    const q = (r.item || r.title || "").toLowerCase().includes(search.toLowerCase()) ||
+              (r.station || r.locationLost || "").toLowerCase().includes(search.toLowerCase());
     if (!q) return false;
-    if (tab === "Active") return r.status === "Searching";
+    if (tab === "Active") return r.status === "Searching" || r.status === "Reported";
     if (tab === "Matched") return r.status === "Matched";
-    if (tab === "Pending") return r.status === "Pending";
-    if (tab === "Closed") return r.status === "Closed";
+    if (tab === "Pending") return r.status === "Pending" || r.status === "Searching";
+    if (tab === "Closed") return r.status === "Closed" || r.status === "Resolved";
     return true;
   });
 
@@ -1767,9 +2072,13 @@ function MyReportsPage({ lostItems, openModal }) {
             <div className="space-y-3">
               {filtered.map((item) => (
                 <div key={item.id} className="flex items-center gap-4 p-4 rounded-xl border border-[#E5E7EB] hover:border-[#DBEAFE] transition-all">
-                  <div className="w-10 h-10 bg-[#EFF6FF] rounded-xl flex items-center justify-center shrink-0">
-                    <Tag size={16} className="text-[#2563EB]" />
-                  </div>
+                  {item.img || item.imageUrl ? (
+                    <img src={item.img || item.imageUrl} alt={item.item || item.title} className="w-12 h-12 object-cover rounded-xl shrink-0 bg-[#F3F4F6]" />
+                  ) : (
+                    <div className="w-10 h-10 bg-[#EFF6FF] rounded-xl flex items-center justify-center shrink-0">
+                      <Tag size={16} className="text-[#2563EB]" />
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-[#111827] text-sm">{item.item}</p>
                     <p className="text-xs text-[#6B7280]">{item.category} · {item.station} · {item.date}</p>
@@ -1789,21 +2098,58 @@ function MyReportsPage({ lostItems, openModal }) {
 
 // ─── NOTIFICATIONS PAGE ───────────────────────────────────────────────────────
 function NotificationsPage({ notifications, setNotifications }) {
+  const [notifList, setNotifList] = useState(notifications);
   const [filterType, setFilterType] = useState("all");
+  const [loading, setLoading] = useState(false);
   const iconMap = { success: CheckCircle, info: Info, warning: AlertTriangle };
   const colorMap = { success: "text-[#16A34A] bg-[#DCFCE7]", info: "text-[#2563EB] bg-[#DBEAFE]", warning: "text-[#CA8A04] bg-[#FEF9C3]" };
 
-  const handleMarkAllRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
-    toast.success("All notifications marked as read");
+  useEffect(() => {
+    fetchNotifs();
+  }, []);
+
+  const fetchNotifs = async () => {
+    setLoading(true);
+    try {
+      const res = await getNotificationsApi();
+      if (res && res.content && res.content.length > 0) {
+        setNotifList(res.content);
+        setNotifications(res.content);
+      }
+    } catch (err) {
+      console.error("Failed to load notifications:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDismiss = (id) => {
-    setNotifications(notifications.filter(n => n.id !== id));
+  const handleMarkAllRead = async () => {
+    try {
+      const unreadItems = notifList.filter(n => !n.read);
+      await Promise.allSettled(unreadItems.map(n => markNotificationReadApi(n.id)));
+      const updated = notifList.map(n => ({ ...n, read: true }));
+      setNotifList(updated);
+      setNotifications(updated);
+      toast.success("All notifications marked as read");
+    } catch (err) {
+      console.error("Error marking all read:", err);
+    }
+  };
+
+  const handleDismiss = async (id) => {
+    try {
+      await markNotificationReadApi(id);
+    } catch (e) {
+      // Ignore if server delete not supported
+    }
+    const updated = notifList.filter(n => n.id !== id);
+    setNotifList(updated);
+    setNotifications(updated);
     toast.info("Notification dismissed");
   };
 
-  const filtered = notifications.filter(n => filterType === "all" ? true : n.type === filterType);
+  const displayList = notifList.length > 0 ? notifList : notifications;
+  const filtered = displayList.filter(n => filterType === "all" ? true : n.type === filterType);
 
   return (
     <div className="p-6 space-y-4 max-w-2xl mx-auto font-[Inter,sans-serif]">
@@ -1859,34 +2205,150 @@ function NotificationsPage({ notifications, setNotifications }) {
 
 // ─── PROFILE PAGE ─────────────────────────────────────────────────────────────
 function ProfilePage({ role, openModal }) {
-  const [notifications2, setNotifications2] = useState(true);
-  const [sms, setSms] = useState(false);
+  const { user, updateUserProfile } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [notifications2, setNotifications2] = useState(user?.emailNotifications ?? true);
+  const [sms, setSms] = useState(user?.smsNotifications ?? false);
+
+  const formatMemberSince = (dateStr) => {
+    if (!dateStr) return "Not available";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "Not available";
+      return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    } catch (e) {
+      return "Not available";
+    }
+  };
 
   const [profileData, setProfileData] = useState({
-    name: role === "admin" ? "Admin User" : role === "staff" ? "Rajesh Kumar" : "Priya Sharma",
-    email: role === "admin" ? "admin@smartlf.in" : role === "staff" ? "rajesh@station.in" : "priya@gmail.com",
-    phone: "+91 98765 43210",
-    memberSince: "January 2025"
+    name: user?.name || "",
+    email: user?.email || "",
+    phone: user?.phone || "",
+    memberSince: formatMemberSince(user?.createdAt)
   });
 
-  const handleSaveProfile = (e) => {
+  useEffect(() => {
+    if (user?.userId) {
+      setLoadingProfile(true);
+      getUserProfileApi(user.userId)
+        .then((data) => {
+          if (data) {
+            setProfileData({
+              name: data.name || user.name || "",
+              email: data.email || user.email || "",
+              phone: data.phone || user.phone || "",
+              memberSince: formatMemberSince(data.createdAt)
+            });
+            if (data.emailNotifications !== undefined) setNotifications2(data.emailNotifications);
+            if (data.smsNotifications !== undefined) setSms(data.smsNotifications);
+            updateUserProfile({
+              name: data.name,
+              phone: data.phone,
+              createdAt: data.createdAt,
+              emailNotifications: data.emailNotifications,
+              smsNotifications: data.smsNotifications
+            });
+          }
+        })
+        .catch((err) => {
+          console.error("Profile fetch error:", err);
+          toast.error(err.response?.data?.message || "Failed to load latest user profile");
+        })
+        .finally(() => {
+          setLoadingProfile(false);
+        });
+    } else {
+      setLoadingProfile(false);
+    }
+  }, [user?.userId]);
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    toast.success("Profile details saved successfully!");
+    if (!user?.userId) {
+      toast.error("Invalid user session");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateProfileApi(user.userId, {
+        name: profileData.name,
+        phone: profileData.phone,
+        emailNotifications: notifications2,
+        smsNotifications: sms
+      });
+      updateUserProfile({
+        name: updated.name,
+        phone: updated.phone,
+        emailNotifications: updated.emailNotifications,
+        smsNotifications: updated.smsNotifications
+      });
+      toast.success("Profile details saved to backend database!");
+    } catch (err) {
+      console.error("Save profile error:", err);
+      toast.error(err.response?.data?.message || "Failed to update profile on backend");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const handleToggleEmail = async () => {
+    const nextVal = !notifications2;
+    setNotifications2(nextVal);
+    if (user?.userId) {
+      try {
+        await updateProfileApi(user.userId, { emailNotifications: nextVal });
+        updateUserProfile({ emailNotifications: nextVal });
+        toast.success("Email notification preference updated!");
+      } catch (err) {
+        setNotifications2(!nextVal);
+        toast.error("Failed to save notification preference");
+      }
+    }
+  };
+
+  const handleToggleSms = async () => {
+    const nextVal = !sms;
+    setSms(nextVal);
+    if (user?.userId) {
+      try {
+        await updateProfileApi(user.userId, { smsNotifications: nextVal });
+        updateUserProfile({ smsNotifications: nextVal });
+        toast.success("SMS notification preference updated!");
+      } catch (err) {
+        setSms(!nextVal);
+        toast.error("Failed to save SMS notification preference");
+      }
+    }
+  };
+
+  if (loadingProfile) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto space-y-5 font-[Inter,sans-serif] text-center text-[#6B7280] py-12">
+        <div className="animate-spin w-8 h-8 border-4 border-[#2563EB] border-t-transparent rounded-full mx-auto mb-3"></div>
+        <p className="text-sm font-medium">Loading profile from database…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-5 font-[Inter,sans-serif]">
       <form onSubmit={handleSaveProfile} className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
         <div className="flex items-center gap-4 mb-6">
           <div className="w-16 h-16 bg-[#2563EB] rounded-2xl flex items-center justify-center text-white text-xl font-bold">
-            {profileData.name[0]}
+            {(profileData.name[0] || "U").toUpperCase()}
           </div>
           <div>
-            <h2 className="font-bold text-[#111827] text-lg">{profileData.name}</h2>
+            <h2 className="font-bold text-[#111827] text-lg">{profileData.name || "User Profile"}</h2>
             <p className="text-sm text-[#6B7280] capitalize">{role} Account</p>
           </div>
-          <button type="submit" className="ml-auto flex items-center gap-1.5 text-sm text-[#2563EB] border border-[#DBEAFE] bg-[#EFF6FF] px-4 py-2 rounded-xl hover:bg-[#DBEAFE] transition-colors font-medium">
-            <Edit2 size={13} /> Save Profile
+          <button
+            type="submit"
+            disabled={saving}
+            className="ml-auto flex items-center gap-1.5 text-sm text-[#2563EB] border border-[#DBEAFE] bg-[#EFF6FF] px-4 py-2 rounded-xl hover:bg-[#DBEAFE] transition-colors font-medium disabled:opacity-50"
+          >
+            <Edit2 size={13} /> {saving ? "Saving…" : "Save Profile"}
           </button>
         </div>
 
@@ -1902,9 +2364,9 @@ function ProfilePage({ role, openModal }) {
           <div>
             <label className="block text-xs font-medium text-[#6B7280] mb-1">Email Address</label>
             <input
+              disabled
               value={profileData.email}
-              onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-              className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"
+              className="w-full px-3.5 py-2.5 border border-[#E5E7EB] rounded-xl text-sm bg-[#F9FAFB] text-[#6B7280]"
             />
           </div>
           <div>
@@ -1912,6 +2374,7 @@ function ProfilePage({ role, openModal }) {
             <input
               value={profileData.phone}
               onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+              placeholder="e.g. +91 98765 43210"
               className="w-full px-3.5 py-2.5 border border-[#D1D5DB] rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"
             />
           </div>
@@ -1936,8 +2399,8 @@ function ProfilePage({ role, openModal }) {
       <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 space-y-4">
         <h3 className="font-semibold text-[#111827]">Notification Settings</h3>
         {[
-          { label: "Email Notifications", sub: "Receive alerts via email", state: notifications2, toggle: () => { setNotifications2(!notifications2); toast.success("Email preference updated!"); } },
-          { label: "SMS Notifications", sub: "Receive alerts via SMS", state: sms, toggle: () => { setSms(!sms); toast.success("SMS preference updated!"); } }
+          { label: "Email Notifications", sub: "Receive alerts via email", state: notifications2, toggle: handleToggleEmail },
+          { label: "SMS Notifications", sub: "Receive alerts via SMS", state: sms, toggle: handleToggleSms }
         ].map(({ label, sub, state, toggle }) => (
           <div key={label} className="flex items-center justify-between py-3 border-b border-[#F3F4F6] last:border-0">
             <div>
@@ -1956,13 +2419,28 @@ function ProfilePage({ role, openModal }) {
 
 // ─── STAFF DASHBOARD ──────────────────────────────────────────────────────────
 function StaffDashboard({ navigate, foundItems, claims }) {
+  const [summary, setSummary] = useState(null);
+
+  useEffect(() => {
+    getStaffDashboardApi()
+      .then((data) => {
+        if (data) setSummary(data);
+      })
+      .catch((err) => console.log("Staff dashboard backend API offline, using local metrics:", err));
+  }, []);
+
+  const totalFound = summary?.totalFoundItems ?? foundItems.length;
+  const pendingCount = summary?.pendingClaims ?? claims.length;
+  const totalMatches = summary?.totalMatches ?? 11;
+  const totalResolved = summary?.resolvedItems ?? 18;
+
   return (
     <div className="p-6 space-y-6 font-[Inter,sans-serif]">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard onClick={() => navigate("staff-manage")} icon={Package} label="Items in Custody" value={foundItems.length.toString()} delta="3 added today" color="bg-[#16A34A]" />
-        <StatCard onClick={() => navigate("staff-claims")} icon={Shield} label="Pending Claims" value={claims.length.toString()} delta="2 urgent" color="bg-[#CA8A04]" />
-        <StatCard onClick={() => navigate("staff-ai")} icon={Cpu} label="AI Matches Today" value="11" color="bg-[#2563EB]" />
-        <StatCard onClick={() => navigate("staff-manage")} icon={CheckCircle} label="Items Returned" value="18" delta="This month" color="bg-[#7C3AED]" />
+        <StatCard onClick={() => navigate("staff-manage")} icon={Package} label="Items in Custody" value={totalFound.toString()} delta="Active" color="bg-[#16A34A]" />
+        <StatCard onClick={() => navigate("staff-claims")} icon={Shield} label="Pending Claims" value={pendingCount.toString()} delta="Needs Review" color="bg-[#CA8A04]" />
+        <StatCard onClick={() => navigate("staff-ai")} icon={Cpu} label="AI Matches" value={totalMatches.toString()} color="bg-[#2563EB]" />
+        <StatCard onClick={() => navigate("staff-manage")} icon={CheckCircle} label="Items Returned" value={totalResolved.toString()} delta="Resolved" color="bg-[#7C3AED]" />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
@@ -2005,12 +2483,15 @@ function StaffDashboard({ navigate, foundItems, claims }) {
 }
 
 // ─── STAFF MANAGE ITEMS PAGE ──────────────────────────────────────────────────
-function StaffManagePage({ foundItems, updateFoundItemStatus, openModal }) {
+function StaffManagePage({ foundItems, updateFoundItemStatus, openModal, globalSearch }) {
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
 
   const filtered = foundItems.filter((item) => {
-    const q = item.name.toLowerCase().includes(search.toLowerCase()) || item.location.toLowerCase().includes(search.toLowerCase());
+    const qTerm = (search || globalSearch || "").toLowerCase();
+    const q = (item.title || item.name || "").toLowerCase().includes(qTerm) ||
+              (item.location || item.station || "").toLowerCase().includes(qTerm) ||
+              (item.category || "").toLowerCase().includes(qTerm);
     const c = filterCat === "all" ? true : item.category === filterCat;
     return q && c;
   });
@@ -2055,7 +2536,13 @@ function StaffManagePage({ foundItems, updateFoundItemStatus, openModal }) {
                 <tr key={item.id} className="hover:bg-[#F8FAFC] transition-colors">
                   <td className="py-3 px-5">
                     <div className="flex items-center gap-3">
-                      <img src={item.img} alt={item.name} className="w-10 h-10 rounded-lg object-cover bg-[#F3F4F6]" />
+                      {item.img || item.imageUrl ? (
+                        <img src={item.img || item.imageUrl} alt={item.name || item.title} className="w-10 h-10 rounded-lg object-cover bg-[#F3F4F6]" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#9CA3AF]">
+                          <Package size={18} />
+                        </div>
+                      )}
                       <span className="font-medium text-[#111827]">{item.name}</span>
                     </div>
                   </td>
@@ -2065,10 +2552,7 @@ function StaffManagePage({ foundItems, updateFoundItemStatus, openModal }) {
                   <td className="py-3 px-5">
                     <select
                       value={item.status}
-                      onChange={(e) => {
-                        updateFoundItemStatus(item.id, e.target.value);
-                        toast.success(`Status updated to ${e.target.value}`);
-                      }}
+                      onChange={(e) => updateFoundItemStatus(item.id, e.target.value)}
                       className={`text-xs font-medium px-2.5 py-1 rounded-full outline-none border ${statusColor(item.status)}`}
                     >
                       <option value="Available">Available</option>
@@ -2102,21 +2586,70 @@ function StaffManagePage({ foundItems, updateFoundItemStatus, openModal }) {
 
 // ─── STAFF CLAIMS PAGE ────────────────────────────────────────────────────────
 function StaffClaimsPage({ claims, approveClaim, rejectClaim, openModal }) {
+  const [claimList, setClaimList] = useState(claims);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchClaims();
+  }, []);
+
+  const fetchClaims = async () => {
+    setLoading(true);
+    try {
+      const res = await getAllClaimsApi();
+      if (res && Array.isArray(res.content)) {
+        setClaimList(res.content);
+      }
+    } catch (err) {
+      console.error("Failed to fetch all claims for staff:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprove = async (claim) => {
+    const targetId = claim.rawId || claim.id;
+    try {
+      const updated = await reviewClaimApi(targetId, "APPROVED", "Ownership proof verified by staff");
+      setClaimList(claimList.map((c) => (c.id === claim.id ? updated : c)));
+      approveClaim(claim.id);
+      toast.success(`Claim ${claim.id} approved! Item resolved and claimant notified.`);
+    } catch (err) {
+      console.error("Approve claim error:", err);
+      toast.error(err.response?.data?.message || "Failed to approve claim");
+    }
+  };
+
+  const handleReject = async (claim) => {
+    const targetId = claim.rawId || claim.id;
+    try {
+      const updated = await reviewClaimApi(targetId, "REJECTED", "Verification proof rejected by staff");
+      setClaimList(claimList.map((c) => (c.id === claim.id ? updated : c)));
+      rejectClaim(claim.id);
+      toast.error(`Claim ${claim.id} rejected.`);
+    } catch (err) {
+      console.error("Reject claim error:", err);
+      toast.error(err.response?.data?.message || "Failed to reject claim");
+    }
+  };
+
+  const displayClaims = claimList;
+
   return (
     <div className="p-6 space-y-5 font-[Inter,sans-serif]">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-[#111827]">Pending Ownership Claims</h2>
-        <span className="text-xs text-[#6B7280]">{claims.length} claims awaiting review</span>
+        <span className="text-xs text-[#6B7280]">{displayClaims.length} claims awaiting review</span>
       </div>
 
-      {claims.length === 0 ? (
+      {displayClaims.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
           <Shield size={32} className="text-[#D1D5DB] mx-auto mb-3" />
           <p className="text-[#6B7280] font-medium">No pending claims at this time</p>
         </div>
       ) : (
         <div className="grid gap-4">
-          {claims.map((claim) => (
+          {displayClaims.map((claim) => (
             <div key={claim.id} className="bg-white rounded-2xl border border-[#E5E7EB] p-5 hover:shadow-sm transition-all">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
@@ -2124,10 +2657,17 @@ function StaffClaimsPage({ claims, approveClaim, rejectClaim, openModal }) {
                     <span className="text-xs font-bold text-[#2563EB] bg-[#EFF6FF] px-2 py-0.5 rounded-md">{claim.id}</span>
                     <h3 className="font-semibold text-[#111827]">{claim.item}</h3>
                   </div>
-                  <p className="text-xs text-[#6B7280] mt-1">Claimant: <span className="font-medium text-[#111827]">{claim.claimant}</span> ({claim.phone})</p>
+                  <p className="text-xs text-[#6B7280] mt-1">Claimant: <span className="font-medium text-[#111827]">{claim.claimant}</span> ({claim.phone || claim.email})</p>
                 </div>
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColor(claim.status)}`}>{claim.status}</span>
               </div>
+
+              {claim.notes && claim.notes.includes("SUSPICIOUS") && (
+                <div className="mt-3 bg-[#FEF2F2] border border-[#FECACA] rounded-xl p-3 flex items-center gap-2 text-xs font-semibold text-[#DC2626]">
+                  <AlertTriangle size={16} className="shrink-0 text-[#DC2626]" />
+                  <span>AI Fraud Warning: {claim.notes}</span>
+                </div>
+              )}
 
               <div className="mt-4 bg-[#F8FAFC] rounded-xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div><span className="text-[#6B7280]">Station:</span> <p className="font-medium text-[#111827]">{claim.station}</p></div>
@@ -2141,19 +2681,13 @@ function StaffClaimsPage({ claims, approveClaim, rejectClaim, openModal }) {
                   View Proof & Answers
                 </button>
                 <button
-                  onClick={() => {
-                    rejectClaim(claim.id);
-                    toast.error(`Claim ${claim.id} rejected`);
-                  }}
+                  onClick={() => handleReject(claim)}
                   className="px-3 py-1.5 bg-[#DC2626] hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors"
                 >
                   Reject Claim
                 </button>
                 <button
-                  onClick={() => {
-                    approveClaim(claim.id);
-                    toast.success(`Claim ${claim.id} approved! Notification sent to passenger.`);
-                  }}
+                  onClick={() => handleApprove(claim)}
                   className="px-3 py-1.5 bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-semibold rounded-lg transition-colors"
                 >
                   Approve Claim
@@ -2169,97 +2703,99 @@ function StaffClaimsPage({ claims, approveClaim, rejectClaim, openModal }) {
 
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
 function AdminDashboard({ navigate, lostItems, foundItems, claims, users }) {
+  const [summary, setSummary] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+
+  useEffect(() => {
+    getAdminDashboardApi()
+      .then((data) => { if (data) setSummary(data); })
+      .catch((err) => console.log("Admin summary backend offline:", err));
+    getAnalyticsApi()
+      .then((data) => { if (data) setAnalytics(data); })
+      .catch((err) => console.log("Analytics backend offline:", err));
+  }, []);
+
+  const totalLost = lostItems.length;
+  const totalFound = foundItems.length;
+  const pendingCount = claims.filter((c) => c.rawStatus === "PENDING" || c.status === "Under Verification").length;
+  const totalResolved = claims.filter((c) => c.rawStatus === "APPROVED" || c.status === "Approved").length;
+  const totalReportsCount = totalLost + totalFound;
+  const resolutionRateNum = totalReportsCount > 0 ? Math.round((totalResolved / totalReportsCount) * 100) : 0;
+  const resRate = `${resolutionRateNum}%`;
+
+  // Compute dynamic category distribution
+  const categoryCounts = {};
+  [...lostItems, ...foundItems].forEach((item) => {
+    const cat = item.category || "General";
+    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+  });
+
+  const categoryColors = ["#2563EB", "#16A34A", "#CA8A04", "#7C3AED", "#0891B2", "#DC2626"];
+  const categoryList = Object.keys(categoryCounts);
+  const dynamicCategoryData = categoryList.length > 0
+    ? categoryList.map((cat, i) => ({
+        name: cat,
+        value: categoryCounts[cat],
+        percentage: Math.round((categoryCounts[cat] / (totalReportsCount || 1)) * 100),
+        color: categoryColors[i % categoryColors.length]
+      }))
+    : [{ name: "General", value: 1, percentage: 100, color: "#2563EB" }];
+
+  // Compute dynamic monthly data
+  const monthsMap = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0, Jul: 0, Aug: 0, Sep: 0, Oct: 0, Nov: 0, Dec: 0 };
+  const currentMonthName = new Date().toLocaleString('default', { month: 'short' });
+  monthsMap[currentMonthName] = totalLost;
+
+  const dynamicMonthlyData = [
+    { month: currentMonthName, lost: totalLost, found: totalFound }
+  ];
+
   return (
     <div className="p-6 space-y-6 font-[Inter,sans-serif]">
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatCard onClick={() => navigate("admin-lost")} icon={FileText} label="Total Lost Reports" value={lostItems.length.toString()} delta="+42 this week" color="bg-[#2563EB]" />
-        <StatCard onClick={() => navigate("admin-found")} icon={Package} label="Total Found Items" value={foundItems.length.toString()} delta="+28 this week" color="bg-[#16A34A]" />
-        <StatCard onClick={() => navigate("admin-claims")} icon={Shield} label="Pending Claims" value={claims.length.toString()} delta="12 urgent" color="bg-[#CA8A04]" />
-        <StatCard onClick={() => navigate("admin-analytics")} icon={CheckCircle} label="Successful Returns" value="724" delta="74% success rate" color="bg-[#7C3AED]" />
-        <StatCard onClick={() => navigate("admin-settings")} icon={Cpu} label="AI Accuracy" value="94.2%" delta="↑ 1.3% vs last month" color="bg-[#0891B2]" />
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-5">
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-          <h3 className="font-semibold text-[#111827] mb-4">Monthly Reports (2026)</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={INITIAL_MONTHLY_DATA} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gLost" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gFound" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#16A34A" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#16A34A" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 12 }} />
-              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-              <Area type="monotone" dataKey="lost" stroke="#2563EB" strokeWidth={2} fill="url(#gLost)" name="Lost" />
-              <Area type="monotone" dataKey="found" stroke="#16A34A" strokeWidth={2} fill="url(#gFound)" name="Found" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-          <h3 className="font-semibold text-[#111827] mb-4">Most Lost Categories</h3>
-          <div className="flex items-center justify-between">
-            <ResponsiveContainer width="55%" height={200}>
-              <RechartsPie>
-                <Pie data={INITIAL_CATEGORY_DATA} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" paddingAngle={3}>
-                  {INITIAL_CATEGORY_DATA.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 12 }} />
-              </RechartsPie>
-            </ResponsiveContainer>
-            <div className="flex-1 space-y-2.5">
-              {INITIAL_CATEGORY_DATA.map((c) => (
-                <div key={c.name} className="flex items-center gap-2.5">
-                  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: c.color }} />
-                  <span className="text-xs text-[#6B7280] flex-1">{c.name}</span>
-                  <span className="text-xs font-bold text-[#111827]">{c.value}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard onClick={() => navigate("admin-lost")} icon={FileText} label="Total Lost Reports" value={totalLost.toString()} delta="Total Logged" color="bg-[#2563EB]" />
+        <StatCard onClick={() => navigate("admin-found")} icon={Package} label="Total Found Items" value={totalFound.toString()} delta="Total Found" color="bg-[#16A34A]" />
+        <StatCard onClick={() => navigate("admin-claims")} icon={Shield} label="Pending Claims" value={pendingCount.toString()} delta="Under Review" color="bg-[#CA8A04]" />
+        <StatCard onClick={() => navigate("admin-users")} icon={Users} label="Registered Users" value={users.length.toString()} delta="Active Accounts" color="bg-[#7C3AED]" />
       </div>
 
       <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-        <h3 className="font-semibold text-[#111827] mb-4">Station-wise Reports</h3>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart
-            data={[
-              { station: "New Delhi", lost: 210, found: 180 },
-              { station: "CSMT Mumbai", lost: 185, found: 155 },
-              { station: "Howrah", lost: 140, found: 120 },
-              { station: "Chennai", lost: 120, found: 98 },
-              { station: "Bengaluru", lost: 95, found: 80 },
-              { station: "Hyderabad", lost: 88, found: 72 }
-            ]}
-            margin={{ top: 0, right: 10, left: -20, bottom: 0 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-            <XAxis dataKey="station" tick={{ fontSize: 10, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 10, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 12 }} />
-            <Bar dataKey="lost" name="Lost" fill="#DBEAFE" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="found" name="Found" fill="#2563EB" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <h3 className="font-semibold text-[#111827] mb-4">Item Category Distribution</h3>
+        <div className="flex items-center justify-between">
+          <ResponsiveContainer width="55%" height={200}>
+            <RechartsPie>
+              <Pie data={dynamicCategoryData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" paddingAngle={3}>
+                {dynamicCategoryData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+              </Pie>
+              <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 12 }} />
+            </RechartsPie>
+          </ResponsiveContainer>
+          <div className="flex-1 space-y-2.5">
+            {dynamicCategoryData.map((c) => (
+              <div key={c.name} className="flex items-center gap-2.5">
+                <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: c.color }} />
+                <span className="text-xs text-[#6B7280] flex-1">{c.name}</span>
+                <span className="text-xs font-bold text-[#111827]">{c.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 // ─── ADMIN LOST ITEMS ─────────────────────────────────────────────────────────
-function AdminLostItems({ lostItems, openModal }) {
+function AdminLostItems({ lostItems, openModal, globalSearch }) {
   const [search, setSearch] = useState("");
-  const filtered = lostItems.filter(r => r.item.toLowerCase().includes(search.toLowerCase()) || r.reporter.toLowerCase().includes(search.toLowerCase()));
+  const filtered = lostItems.filter((r) => {
+    const itemName = (r?.item || r?.title || "").toLowerCase();
+    const reporterName = (r?.reporter || (r?.reportedBy ? `User #${r.reportedBy}` : "")).toLowerCase();
+    const category = (r?.category || "").toLowerCase();
+    const station = (r?.station || r?.location || "").toLowerCase();
+    const q = (search || globalSearch || "").toLowerCase();
+    return itemName.includes(q) || reporterName.includes(q) || category.includes(q) || station.includes(q);
+  });
 
   return (
     <div className="p-6 font-[Inter,sans-serif]">
@@ -2351,10 +2887,30 @@ function AdminAIReview({ aiMatches, openModal }) {
                 <div className="flex items-center gap-1.5"><Calendar size={11} />{m.date}</div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <button onClick={() => toast.success(`AI Match #${m.id} approved!`)} className="flex items-center gap-1.5 bg-[#16A34A] text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-[#15803D] transition-colors">
+                <button
+                  onClick={async () => {
+                    try {
+                      await updateMatchStatusApi(m.id, "CONFIRMED");
+                      toast.success(`AI Match #${m.id} confirmed!`);
+                    } catch (e) {
+                      toast.error("Failed to confirm match");
+                    }
+                  }}
+                  className="flex items-center gap-1.5 bg-[#16A34A] text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-[#15803D] transition-colors"
+                >
                   <Check size={12} /> Approve Match
                 </button>
-                <button onClick={() => toast.error(`AI Match #${m.id} rejected`)} className="flex items-center gap-1.5 bg-[#DC2626] text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-red-700 transition-colors">
+                <button
+                  onClick={async () => {
+                    try {
+                      await updateMatchStatusApi(m.id, "REJECTED");
+                      toast.error(`AI Match #${m.id} rejected`);
+                    } catch (e) {
+                      toast.error("Failed to reject match");
+                    }
+                  }}
+                  className="flex items-center gap-1.5 bg-[#DC2626] text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                >
                   <X size={12} /> Reject Match
                 </button>
                 <button onClick={() => openModal("reviewClaim", m)} className="flex items-center gap-1.5 border border-[#D1D5DB] text-[#6B7280] text-xs font-medium px-3 py-2 rounded-lg hover:bg-[#F9FAFB] transition-colors">
@@ -2370,9 +2926,15 @@ function AdminAIReview({ aiMatches, openModal }) {
 }
 
 // ─── ADMIN USERS ──────────────────────────────────────────────────────────────
-function AdminUsers({ users, openModal }) {
+function AdminUsers({ users, openModal, globalSearch }) {
   const [search, setSearch] = useState("");
-  const filtered = users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
+  const filtered = users.filter(u => {
+    const q = (search || globalSearch || "").toLowerCase();
+    return (u.name || "").toLowerCase().includes(q) ||
+           (u.email || "").toLowerCase().includes(q) ||
+           (u.phone || "").toLowerCase().includes(q) ||
+           (u.role || "").toLowerCase().includes(q);
+  });
 
   return (
     <div className="p-6 font-[Inter,sans-serif]">
@@ -2438,9 +3000,12 @@ function AdminUsers({ users, openModal }) {
 }
 
 // ─── ADMIN STATIONS PAGE ──────────────────────────────────────────────────────
-function AdminStations({ stations, openModal }) {
+function AdminStations({ stations, openModal, globalSearch }) {
   const [search, setSearch] = useState("");
-  const filtered = stations.filter(s => s.toLowerCase().includes(search.toLowerCase()));
+  const filtered = stations.filter(s => {
+    const q = (search || globalSearch || "").toLowerCase();
+    return s.toLowerCase().includes(q);
+  });
 
   return (
     <div className="p-6 font-[Inter,sans-serif]">
@@ -2589,21 +3154,13 @@ function AdminSettings({ openModal }) {
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-5 font-[Inter,sans-serif]">
       <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 space-y-5">
-        <h3 className="font-semibold text-[#111827]">AI Configuration</h3>
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-medium text-[#111827]">AI Match Threshold</label>
-            <span className="text-sm font-bold text-[#2563EB]">{threshold}%</span>
+        <h3 className="font-semibold text-[#111827]">AI Pipeline Status</h3>
+        <div className="p-3 bg-[#F0FDF4] border border-[#BBF7D0] rounded-xl flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-[#166534]">Real-Time Multimodal AI Matching Pipeline</p>
+            <p className="text-[11px] text-[#15803D]">CLIP Image Embeddings & SentenceTransformer Semantic Search Active</p>
           </div>
-          <input
-            type="range"
-            min={60}
-            max={99}
-            value={threshold}
-            onChange={(e) => setThreshold(Number(e.target.value))}
-            className="w-full accent-[#2563EB]"
-          />
-          <div className="flex justify-between text-xs text-[#9CA3AF] mt-1"><span>60% (Broad)</span><span>99% (Strict)</span></div>
+          <span className="text-xs font-semibold px-2.5 py-1 bg-[#16A34A] text-white rounded-full">ACTIVE</span>
         </div>
         <div className="flex items-center justify-between py-3 border-t border-[#F3F4F6]">
           <div>
@@ -2640,9 +3197,9 @@ function AdminSettings({ openModal }) {
 }
 
 // ─── SHELL LAYOUTS ────────────────────────────────────────────────────────────
-function UserShell({ page, navigate, onLogout, role, lostItems, addLostItem, foundItems, addFoundItem, aiMatches, setSelectedMatch, selectedMatch, dismissMatch, claims, addClaim, notifications, setNotifications, globalSearch, setGlobalSearch, openModal }) {
+function UserShell({ page, navigate, onLogout, role, lostItems, myLostItems, addLostItem, foundItems, addFoundItem, aiMatches, setSelectedMatch, selectedMatch, dismissMatch, claims, addClaim, activeClaim, setActiveClaim, authUser, notifications, setNotifications, globalSearch, setGlobalSearch, openModal }) {
   const titles = {
-    "user-dashboard": ["Dashboard", "Welcome back, Priya"],
+    "user-dashboard": ["Dashboard", "Welcome back"],
     "user-report-lost": ["Report Lost Item", "Submit a lost item report"],
     "user-report-found": ["Report Found Item", "Help reunite an item with its owner"],
     "user-ai-matches": ["AI Match Results", "Potential matches for your items"],
@@ -2669,14 +3226,14 @@ function UserShell({ page, navigate, onLogout, role, lostItems, addLostItem, fou
           setGlobalSearch={setGlobalSearch}
         />
         <main className="flex-1 overflow-y-auto">
-          {page === "user-dashboard" && <UserDashboard navigate={navigate} lostItems={lostItems} aiMatches={aiMatches} setSelectedMatch={setSelectedMatch} />}
+          {page === "user-dashboard" && <UserDashboard navigate={navigate} lostItems={lostItems} myLostItems={myLostItems} foundItems={foundItems} aiMatches={aiMatches} setSelectedMatch={setSelectedMatch} />}
           {page === "user-report-lost" && <ReportLostPage navigate={navigate} addLostItem={addLostItem} />}
           {page === "user-report-found" && <ReportFoundPage addFoundItem={addFoundItem} />}
-          {page === "user-ai-matches" && <AIMatchesPage navigate={navigate} aiMatches={aiMatches} setSelectedMatch={setSelectedMatch} dismissMatch={dismissMatch} />}
+          {page === "user-ai-matches" && <AIMatchesPage navigate={navigate} aiMatches={aiMatches} foundItems={foundItems} setSelectedMatch={setSelectedMatch} dismissMatch={dismissMatch} globalSearch={globalSearch} />}
           {page === "user-match-detail" && <MatchDetailPage navigate={navigate} selectedMatch={selectedMatch} setSelectedMatch={setSelectedMatch} />}
-          {page === "user-claim-verify" && <ClaimVerifyPage navigate={navigate} selectedMatch={selectedMatch} addClaim={addClaim} />}
-          {page === "user-claim-success" && <ClaimSuccessPage navigate={navigate} />}
-          {page === "user-my-reports" && <MyReportsPage lostItems={lostItems} openModal={openModal} />}
+          {page === "user-claim-verify" && <ClaimVerifyPage navigate={navigate} selectedMatch={selectedMatch} addClaim={addClaim} setActiveClaim={setActiveClaim} />}
+          {page === "user-claim-success" && <ClaimSuccessPage navigate={navigate} activeClaim={activeClaim} authUser={authUser} selectedMatch={selectedMatch} />}
+          {page === "user-my-reports" && <MyReportsPage myLostItems={myLostItems} openModal={openModal} />}
           {page === "user-notifications" && <NotificationsPage notifications={notifications} setNotifications={setNotifications} />}
           {page === "user-profile" && <ProfilePage role={role} openModal={openModal} />}
         </main>
@@ -2685,7 +3242,7 @@ function UserShell({ page, navigate, onLogout, role, lostItems, addLostItem, fou
   );
 }
 
-function StaffShell({ page, navigate, onLogout, role, foundItems, addFoundItem, claims, approveClaim, rejectClaim, updateFoundItemStatus, notifications, setNotifications, globalSearch, setGlobalSearch, openModal }) {
+function StaffShell({ page, navigate, onLogout, role, foundItems, addFoundItem, claims, approveClaim, rejectClaim, updateFoundItemStatus, aiMatches, setSelectedMatch, dismissMatch, notifications, setNotifications, globalSearch, setGlobalSearch, openModal }) {
   const titles = {
     "staff-dashboard": ["Staff Dashboard", "New Delhi Railway Station"],
     "staff-register": ["Register Found Item", "Log a newly found item"],
@@ -2705,9 +3262,9 @@ function StaffShell({ page, navigate, onLogout, role, foundItems, addFoundItem, 
         <main className="flex-1 overflow-y-auto">
           {page === "staff-dashboard" && <StaffDashboard navigate={navigate} foundItems={foundItems} claims={claims} />}
           {page === "staff-register" && <ReportFoundPage addFoundItem={addFoundItem} />}
-          {page === "staff-manage" && <StaffManagePage foundItems={foundItems} updateFoundItemStatus={updateFoundItemStatus} openModal={openModal} />}
-          {page === "staff-claims" && <StaffClaimsPage claims={claims} approveClaim={approveClaim} rejectClaim={rejectClaim} openModal={openModal} />}
-          {page === "staff-ai" && <AIMatchesPage navigate={navigate} aiMatches={INITIAL_AI_MATCHES} setSelectedMatch={() => {}} dismissMatch={() => {}} />}
+          {page === "staff-manage" && <StaffManagePage foundItems={foundItems} updateFoundItemStatus={updateFoundItemStatus} openModal={openModal} globalSearch={globalSearch} />}
+          {page === "staff-claims" && <StaffClaimsPage claims={claims} approveClaim={approveClaim} rejectClaim={rejectClaim} openModal={openModal} globalSearch={globalSearch} />}
+          {page === "staff-ai" && <AIMatchesPage navigate={navigate} aiMatches={aiMatches} foundItems={foundItems || []} setSelectedMatch={setSelectedMatch} dismissMatch={dismissMatch} role={role} globalSearch={globalSearch} />}
           {page === "user-notifications" && <NotificationsPage notifications={notifications} setNotifications={setNotifications} />}
           {page === "user-profile" && <ProfilePage role={role} openModal={openModal} />}
         </main>
@@ -2716,7 +3273,7 @@ function StaffShell({ page, navigate, onLogout, role, foundItems, addFoundItem, 
   );
 }
 
-function AdminShell({ page, navigate, onLogout, role, lostItems, foundItems, claims, approveClaim, rejectClaim, updateFoundItemStatus, users, stations, notifications, setNotifications, globalSearch, setGlobalSearch, openModal }) {
+function AdminShell({ page, navigate, onLogout, role, lostItems, foundItems, claims, approveClaim, rejectClaim, updateFoundItemStatus, aiMatches, setSelectedMatch, dismissMatch, users, stations, notifications, setNotifications, globalSearch, setGlobalSearch, openModal }) {
   const titles = {
     "admin-dashboard": ["Admin Dashboard", "System overview and analytics"],
     "admin-lost": ["Lost Items Management", "All registered lost item reports"],
@@ -2737,13 +3294,13 @@ function AdminShell({ page, navigate, onLogout, role, lostItems, foundItems, cla
         <Topbar title={title} subtitle={subtitle} role={role} navigate={navigate} notifications={notifications} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} />
         <main className="flex-1 overflow-y-auto">
           {page === "admin-dashboard" && <AdminDashboard navigate={navigate} lostItems={lostItems} foundItems={foundItems} claims={claims} users={users} />}
-          {page === "admin-lost" && <AdminLostItems lostItems={lostItems} openModal={openModal} />}
-          {page === "admin-found" && <StaffManagePage foundItems={foundItems} updateFoundItemStatus={updateFoundItemStatus} openModal={openModal} />}
-          {page === "admin-ai" && <AdminAIReview aiMatches={INITIAL_AI_MATCHES} openModal={openModal} />}
-          {page === "admin-claims" && <StaffClaimsPage claims={claims} approveClaim={approveClaim} rejectClaim={rejectClaim} openModal={openModal} />}
-          {page === "admin-users" && <AdminUsers users={users} openModal={openModal} />}
-          {page === "admin-stations" && <AdminStations stations={stations} openModal={openModal} />}
-          {page === "admin-analytics" && <AdminAnalytics />}
+          {page === "admin-lost" && <AdminLostItems lostItems={lostItems} openModal={openModal} globalSearch={globalSearch} />}
+          {page === "admin-found" && <StaffManagePage foundItems={foundItems} updateFoundItemStatus={updateFoundItemStatus} openModal={openModal} globalSearch={globalSearch} />}
+          {page === "admin-ai" && <AdminAIReview aiMatches={aiMatches} openModal={openModal} />}
+          {page === "admin-claims" && <StaffClaimsPage claims={claims} approveClaim={approveClaim} rejectClaim={rejectClaim} openModal={openModal} globalSearch={globalSearch} />}
+          {page === "admin-users" && <AdminUsers users={users} openModal={openModal} globalSearch={globalSearch} />}
+          {page === "admin-stations" && <AdminStations stations={stations} openModal={openModal} globalSearch={globalSearch} />}
+          {page === "admin-analytics" && <AdminDashboard lostItems={lostItems} foundItems={foundItems} claims={claims} users={users} navigate={navigate} />}
           {page === "admin-settings" && <AdminSettings openModal={openModal} />}
         </main>
       </div>
@@ -2841,7 +3398,7 @@ function ModalDialog({ activeModal, modalData, closeModal, onAction }) {
         {activeModal === "viewItem" && modalData && (
           <div>
             <h3 className="text-lg font-bold text-[#111827] mb-2">{modalData.name || modalData.item}</h3>
-            {modalData.img && <img src={modalData.img} alt="item" className="w-full h-48 object-cover rounded-xl mb-4 bg-[#F3F4F6]" />}
+            {(modalData.img || modalData.imageUrl) && <img src={modalData.img || modalData.imageUrl} alt="item" className="w-full h-48 object-cover rounded-xl mb-4 bg-[#F3F4F6]" />}
             <div className="grid grid-cols-2 gap-3 text-xs mb-4 bg-[#F8FAFC] p-3 rounded-xl">
               <div><span className="text-[#6B7280]">Category:</span> <p className="font-semibold text-[#111827]">{modalData.category}</p></div>
               <div><span className="text-[#6B7280]">Status:</span> <p className="font-semibold text-[#111827]">{modalData.status}</p></div>
@@ -2849,7 +3406,18 @@ function ModalDialog({ activeModal, modalData, closeModal, onAction }) {
               <div><span className="text-[#6B7280]">Station/Location:</span> <p className="font-semibold text-[#111827]">{modalData.station || modalData.location}</p></div>
             </div>
             <p className="text-xs text-[#6B7280] mb-6">{modalData.desc || "Item registered in system vault."}</p>
-            <button onClick={closeModal} className="w-full bg-[#2563EB] text-white py-2 rounded-xl text-sm font-semibold">
+            {modalData && (modalData.type === "FOUND" || modalData.location || modalData.dateFound) && onAction && (
+              <button
+                onClick={() => {
+                  closeModal();
+                  onAction("claimFoundItem", modalData);
+                }}
+                className="w-full bg-[#16A34A] hover:bg-[#15803D] text-white py-2.5 rounded-xl text-sm font-semibold mb-2 flex items-center justify-center gap-2"
+              >
+                <Shield size={16} /> Claim This Item
+              </button>
+            )}
+            <button onClick={closeModal} className="w-full border border-[#D1D5DB] text-[#6B7280] hover:bg-[#F9FAFB] py-2 rounded-xl text-sm font-semibold">
               Close Details
             </button>
           </div>
@@ -2969,8 +3537,8 @@ function ModalDialog({ activeModal, modalData, closeModal, onAction }) {
         {activeModal === "editStation" && modalData && (
           <div>
             <h3 className="text-lg font-bold text-[#111827] mb-3">Edit Station Name</h3>
-            <form onSubmit={(e) => { e.preventDefault(); toast.success("Station updated!"); closeModal(); }} className="space-y-3">
-              <input defaultValue={modalData} className="w-full px-3.5 py-2 border rounded-xl text-sm outline-none" />
+            <form onSubmit={(e) => { e.preventDefault(); onAction("editStation", e); closeModal(); }} className="space-y-3">
+              <input required name="station" defaultValue={typeof modalData === "object" ? modalData.name : modalData} className="w-full px-3.5 py-2 border rounded-xl text-sm outline-none" />
               <button type="submit" className="w-full bg-[#2563EB] text-white py-2.5 rounded-xl text-sm font-semibold">
                 Save Station
               </button>
@@ -2992,6 +3560,16 @@ function ModalDialog({ activeModal, modalData, closeModal, onAction }) {
         {activeModal === "reviewClaim" && modalData && (
           <div>
             <h3 className="text-lg font-bold text-[#111827] mb-2">Claim Review #{modalData.id || modalData.item}</h3>
+            {(modalData.proofImg || modalData.imageUrl) ? (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-[#111827] mb-1.5">Attached Proof Document / Photo:</p>
+                <img src={modalData.proofImg || modalData.imageUrl} alt="Proof Document" className="w-full h-48 object-cover rounded-xl border border-[#E5E7EB] bg-[#F3F4F6]" />
+              </div>
+            ) : (
+              <div className="mb-4 p-3 bg-[#F8FAFC] border border-[#E5E7EB] rounded-xl text-center text-xs text-[#6B7280] font-medium">
+                No proof image attached by claimant.
+              </div>
+            )}
             <div className="space-y-3 text-xs bg-[#F8FAFC] p-4 rounded-xl mb-4">
               <p><strong className="text-[#111827]">Claimant:</strong> {modalData.claimant || "Passenger"}</p>
               <p><strong className="text-[#111827]">Station:</strong> {modalData.station}</p>
@@ -3011,43 +3589,336 @@ function ModalDialog({ activeModal, modalData, closeModal, onAction }) {
         )}
 
         {activeModal === "changePassword" && (
-          <div>
-            <h3 className="text-lg font-bold text-[#111827] mb-3">Change Password</h3>
-            <form onSubmit={(e) => { e.preventDefault(); toast.success("Password changed successfully!"); closeModal(); }} className="space-y-3">
-              <input required type="password" placeholder="Current Password" className="w-full px-3.5 py-2 border rounded-xl text-sm outline-none" />
-              <input required type="password" placeholder="New Password" className="w-full px-3.5 py-2 border rounded-xl text-sm outline-none" />
-              <input required type="password" placeholder="Confirm New Password" className="w-full px-3.5 py-2 border rounded-xl text-sm outline-none" />
-              <button type="submit" className="w-full bg-[#2563EB] text-white py-2.5 rounded-xl text-sm font-semibold">
-                Update Password
-              </button>
-            </form>
-          </div>
+          <ChangePasswordModalContent closeModal={closeModal} />
         )}
       </div>
     </div>
   );
 }
 
+function ChangePasswordModalContent({ closeModal }) {
+  const { user } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error("New password and confirm password do not match");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error("New password must be at least 6 characters long");
+      return;
+    }
+    if (!user?.userId) {
+      toast.error("Invalid user session");
+      return;
+    }
+    setLoading(true);
+    try {
+      await changePasswordApi(user.userId, { currentPassword, newPassword });
+      toast.success("Password updated and persisted to backend database!");
+      closeModal();
+    } catch (err) {
+      console.error("Change password error:", err);
+      toast.error(err.response?.data?.message || err.message || "Failed to change password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h3 className="text-lg font-bold text-[#111827] mb-3">Change Password</h3>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <input
+          required
+          type="password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          placeholder="Current Password"
+          className="w-full px-3.5 py-2 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:border-[#2563EB]"
+        />
+        <input
+          required
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="New Password (min 6 chars)"
+          className="w-full px-3.5 py-2 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:border-[#2563EB]"
+        />
+        <input
+          required
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Confirm New Password"
+          className="w-full px-3.5 py-2 border border-[#D1D5DB] rounded-xl text-sm outline-none focus:border-[#2563EB]"
+        />
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={closeModal} className="flex-1 border py-2 rounded-xl text-sm font-medium hover:bg-[#F9FAFB]">
+            Cancel
+          </button>
+          <button type="submit" disabled={loading} className="flex-1 bg-[#2563EB] text-white py-2 rounded-xl text-sm font-semibold hover:bg-[#1D4ED8] disabled:opacity-50">
+            {loading ? "Updating…" : "Update Password"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ─── MAIN APP ENTRY POINT ─────────────────────────────────────────────────────
-export default function App() {
-  const [page, setPage] = useState("landing");
-  const [role, setRole] = useState("user");
+function AppContent() {
+  const auth = useAuth();
+  const [page, setPage] = useState(() => {
+    const saved = localStorage.getItem("smartlf_page");
+    if (saved && saved !== "login" && saved !== "landing") {
+      return saved;
+    }
+    return "landing";
+  });
+  const [role, setRole] = useState(auth.role || "user");
   const [globalSearch, setGlobalSearch] = useState("");
 
-  // Elevated Global States
-  const [lostItems, setLostItems] = useState(INITIAL_LOST_ITEMS);
-  const [foundItems, setFoundItems] = useState(INITIAL_FOUND_ITEMS);
-  const [aiMatches, setAiMatches] = useState(INITIAL_AI_MATCHES);
-  const [claims, setClaims] = useState(INITIAL_CLAIMS);
-  const [users, setUsers] = useState(INITIAL_ADMIN_USERS);
+  // Elevated Global States (Initialized from Live Microservices API)
+  const [lostItems, setLostItems] = useState([]);
+  const [myLostItems, setMyLostItems] = useState([]);
+  const [foundItems, setFoundItems] = useState([]);
+  const [aiMatches, setAiMatches] = useState([]);
+  const [claims, setClaims] = useState([]);
+  const [activeClaim, setActiveClaim] = useState(null);
+  const [users, setUsers] = useState([]);
   const [stations, setStations] = useState(INITIAL_STATIONS);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
 
-  const [selectedMatch, setSelectedMatch] = useState(INITIAL_AI_MATCHES[0]);
+  const [selectedMatch, setSelectedMatch] = useState(null);
 
   // Modal State
   const [activeModal, setActiveModal] = useState(null);
   const [modalData, setModalData] = useState(null);
+
+  // Helper to validate page permissions against current auth & role
+  const isAllowedPage = (targetPage, isAuth, userRole) => {
+    if (!targetPage) return false;
+    if (targetPage === "landing" || targetPage === "login") return true;
+    if (!isAuth) return false;
+    if (targetPage === "user-profile" || targetPage === "user-notifications") return true;
+
+    if (userRole === "user") {
+      return targetPage.startsWith("user-");
+    } else if (userRole === "staff") {
+      return targetPage.startsWith("staff-") || targetPage.startsWith("user-");
+    } else if (userRole === "admin") {
+      return targetPage.startsWith("admin-") || targetPage.startsWith("staff-") || targetPage.startsWith("user-");
+    }
+    return false;
+  };
+
+  // Sync state role and active page after auth session hydration & handle history replaceState
+  useEffect(() => {
+    if (!auth.loading) {
+      const normRole = auth.role || "user";
+      if (auth.isAuthenticated) {
+        setRole(normRole);
+        const saved = localStorage.getItem("smartlf_page");
+        const defaultDash = `${normRole}-dashboard`;
+        let targetPage = defaultDash;
+        if (saved && saved !== "login" && saved !== "landing" && isAllowedPage(saved, true, normRole)) {
+          targetPage = saved;
+        }
+        setPage(targetPage);
+        localStorage.setItem("smartlf_page", targetPage);
+        if (!window.history.state || window.history.state.page !== targetPage) {
+          window.history.replaceState({ page: targetPage, role: normRole, smartlf: true }, "", window.location.pathname);
+        }
+      } else {
+        setRole("user");
+        const curPage = page === "login" ? "login" : "landing";
+        setPage(curPage);
+        localStorage.removeItem("smartlf_page");
+        if (!window.history.state || window.history.state.page !== curPage) {
+          window.history.replaceState({ page: curPage, role: "user", smartlf: true }, "", window.location.pathname);
+        }
+      }
+    }
+  }, [auth.isAuthenticated, auth.loading, auth.role]);
+
+  // Listen to popstate event (Browser Back / Forward)
+  useEffect(() => {
+    if (auth.loading) return;
+
+    const handlePopState = (event) => {
+      const state = event.state;
+      const normRole = auth.role || "user";
+
+      if (state && state.smartlf && state.page) {
+        const targetPage = state.page;
+        const targetRole = state.role || normRole;
+
+        // Unauthenticated access check on Back/Forward
+        if (targetPage !== "landing" && targetPage !== "login" && !auth.isAuthenticated) {
+          setPage("landing");
+          setRole("user");
+          localStorage.removeItem("smartlf_page");
+          window.history.replaceState({ page: "landing", role: "user", smartlf: true }, "", window.location.pathname);
+          return;
+        }
+
+        // Role authorization check on Back/Forward
+        if (auth.isAuthenticated && !isAllowedPage(targetPage, auth.isAuthenticated, normRole)) {
+          const fallback = `${normRole}-dashboard`;
+          setPage(fallback);
+          setRole(normRole);
+          localStorage.setItem("smartlf_page", fallback);
+          window.history.replaceState({ page: fallback, role: normRole, smartlf: true }, "", window.location.pathname);
+          return;
+        }
+
+        if (targetRole) setRole(targetRole);
+        setPage(targetPage);
+
+        if (targetPage !== "login" && targetPage !== "landing") {
+          localStorage.setItem("smartlf_page", targetPage);
+        } else {
+          localStorage.removeItem("smartlf_page");
+        }
+      } else {
+        // Fallback for null state or external entry
+        if (auth.isAuthenticated) {
+          const fallback = localStorage.getItem("smartlf_page") || `${normRole}-dashboard`;
+          setPage(fallback);
+          setRole(normRole);
+        } else {
+          setPage("landing");
+          setRole("user");
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [auth.isAuthenticated, auth.loading, auth.role]);
+
+  // Load backend items, matches, claims, and notifications on mount / authentication
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      loadPhase3Data();
+    }
+  }, [auth.isAuthenticated]);
+
+  const loadPhase3Data = async () => {
+    try {
+      const currentRole = (auth.role || auth.user?.role || role || "").toString().toLowerCase();
+      const isStaffOrAdmin = currentRole === "staff" || currentRole === "admin";
+      const [lostRes, foundRes, matchesRes, claimsRes, notifRes, usersRes, myLostRes, stationsRes] = await Promise.allSettled([
+        getLostItemsApi(),
+        getFoundItemsApi(),
+        getMatchesForUserApi(),
+        isStaffOrAdmin ? getAllClaimsApi().then(r => r.content || []) : getMyClaimsApi(),
+        getNotificationsApi(),
+        isStaffOrAdmin ? getAllUsersApi() : Promise.resolve([]),
+        getMyLostItemsApi(),
+        getStationsApi()
+      ]);
+
+      if (lostRes.status === "fulfilled") {
+        setLostItems(lostRes.value?.content || []);
+      }
+      if (myLostRes.status === "fulfilled") {
+        setMyLostItems(myLostRes.value || []);
+      } else {
+        setMyLostItems([]);
+      }
+      if (foundRes.status === "fulfilled") {
+        setFoundItems(foundRes.value?.content || []);
+      }
+      const allFoundList = foundRes.status === "fulfilled" ? (foundRes.value?.content || foundRes.value || []) : [];
+      const allLostList = lostRes.status === "fulfilled" ? (lostRes.value?.content || lostRes.value || []) : [];
+      const userLostList = myLostRes.status === "fulfilled" ? (myLostRes.value || []) : [];
+      const userLostItemIds = new Set(userLostList.map(i => i.id));
+
+      if (matchesRes.status === "fulfilled") {
+        const rawMatches = matchesRes.value || [];
+        const isPassenger = !isStaffOrAdmin;
+
+        // Passenger gets matches related to their reported lost items; Staff/Admin gets system-wide matches
+        const relevantMatches = isPassenger && userLostItemIds.size > 0
+          ? rawMatches.filter(m => userLostItemIds.has(m.lostItemId))
+          : isPassenger
+            ? [] // No lost items reported by passenger = 0 AI matches
+            : rawMatches;
+
+        const enrichedMatches = relevantMatches.map(m => {
+          const lostObj = userLostList.find(i => i.id === m.lostItemId) || allLostList.find(i => i.id === m.lostItemId);
+          const foundObj = allFoundList.find(i => i.id === m.foundItemId);
+
+          const lName = lostObj?.item || lostObj?.title || lostObj?.name || `Lost Item #${m.lostItemId}`;
+          const fName = foundObj?.item || foundObj?.title || foundObj?.name || `Found Item #${m.foundItemId}`;
+          const fDesc = foundObj?.description || foundObj?.desc || "No description provided.";
+          const fStation = foundObj?.station || foundObj?.location || "Station Vault";
+          const fImg = foundObj?.img || foundObj?.imageUrl || (m.foundItemId ? getImageUrl(`/api/items/images/${m.foundItemId}`) : null);
+
+          return {
+            ...m,
+            lostItem: lName,
+            lostItemName: lName,
+            lostItemDescription: lostObj?.description || lostObj?.desc || "No lost item notes",
+            foundItem: fName,
+            foundItemName: fName,
+            foundItemDescription: fDesc,
+            station: fStation,
+            img: fImg,
+            imageUrl: fImg,
+            score: m.score != null ? m.score : (m.similarityScore != null ? (m.similarityScore <= 1 ? Math.round(m.similarityScore * 100) : Math.round(m.similarityScore)) : 85),
+          };
+        });
+
+        setAiMatches(enrichedMatches);
+        if (enrichedMatches.length > 0) setSelectedMatch(enrichedMatches[0]);
+      }
+      if (claimsRes.status === "fulfilled") {
+        setClaims(claimsRes.value || []);
+      }
+      if (notifRes.status === "fulfilled") {
+        setNotifications(notifRes.value?.content || []);
+      }
+      if (usersRes.status === "fulfilled" && Array.isArray(usersRes.value)) {
+        setUsers(usersRes.value.map((u) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          phone: u.phone || "",
+          role: (u.role || "USER").toLowerCase(),
+          status: "active"
+        })));
+      }
+      if (stationsRes.status === "fulfilled" && Array.isArray(stationsRes.value)) {
+        const backendNames = stationsRes.value.map(s => s.name);
+        const merged = Array.from(new Set([...INITIAL_STATIONS, ...backendNames]));
+        setStations(merged);
+      }
+    } catch (err) {
+      console.error("Error loading Phase 3 data:", err);
+    }
+  };
+
+  // Session hydration loading screen
+  if (auth.loading) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center font-[Inter,sans-serif]">
+        <div className="flex items-center gap-3 text-[#2563EB]">
+          <RefreshCw className="animate-spin" size={24} />
+          <span className="font-semibold text-sm">Restoring session…</span>
+        </div>
+      </div>
+    );
+  }
 
   const openModal = (type, data = null) => {
     setActiveModal(type);
@@ -3060,87 +3931,296 @@ export default function App() {
   };
 
   const navigate = (p, r, isReg = false) => {
+    const targetRole = r || role || auth.role || "user";
     if (r) setRole(r);
     setPage(p);
+
+    if (p !== "login" && p !== "landing") {
+      localStorage.setItem("smartlf_page", p);
+    } else {
+      localStorage.removeItem("smartlf_page");
+    }
+
+    const currentState = window.history.state;
+    if (!currentState || currentState.page !== p) {
+      window.history.pushState(
+        { page: p, role: targetRole, smartlf: true },
+        "",
+        window.location.pathname
+      );
+    }
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const logout = () => {
-    toast.info("Logged out successfully");
+    auth.logout();
     setPage("landing");
     setRole("user");
+    localStorage.removeItem("smartlf_page");
+    window.history.replaceState(
+      { page: "landing", role: "user", smartlf: true },
+      "",
+      window.location.pathname
+    );
+    toast.info("Logged out successfully");
   };
 
   // Mutators
-  const addLostItem = (itemData) => {
-    const newItem = {
-      id: lostItems.length + 1,
-      ...itemData
-    };
-    setLostItems([newItem, ...lostItems]);
-    setNotifications([
-      { id: Date.now(), type: "info", title: "New Lost Item Logged", body: `${itemData.item} at ${itemData.station}`, time: "Just now", read: false },
-      ...notifications
-    ]);
+  const addLostItem = async (itemData) => {
+    setLostItems((prev) => [itemData, ...prev]);
+    setMyLostItems((prev) => [itemData, ...prev]);
+    if (auth.user?.userId) {
+      const created = await createNotificationApi(
+        auth.user.userId,
+        `Your lost item report for "${itemData.item || itemData.title}" was submitted successfully.`,
+        "ITEM"
+      );
+      if (created) {
+        setNotifications((prev) => [created, ...prev]);
+      }
+    }
   };
 
   const addFoundItem = (itemData) => {
-    const newItem = {
-      id: foundItems.length + 1,
-      ...itemData
-    };
-    setFoundItems([newItem, ...foundItems]);
+    setFoundItems((prev) => [itemData, ...prev]);
   };
 
-  const updateFoundItemStatus = (id, status) => {
-    setFoundItems(foundItems.map(f => f.id === id ? { ...f, status } : f));
+  const updateFoundItemStatus = async (id, status) => {
+    let backendStatus = "ACTIVE";
+    const upper = String(status).toUpperCase();
+    if (upper === "CLAIMED") {
+      backendStatus = "CLAIMED";
+    } else if (upper === "DISPOSED" || upper === "CLOSED" || upper === "RESOLVED") {
+      backendStatus = "RESOLVED";
+    } else {
+      backendStatus = "ACTIVE";
+    }
+
+    try {
+      const updated = await updateFoundItemStatusApi(id, backendStatus);
+      setFoundItems((prevItems) =>
+        prevItems.map((f) => (f.id === id ? { ...f, ...updated, status } : f))
+      );
+      toast.success(`Status updated to ${status}`);
+    } catch (err) {
+      console.error("Failed to update item status", {
+        itemId: id,
+        requestedStatus: status,
+        backendStatus,
+        statusCode: err.response?.status,
+        response: err.response?.data,
+      });
+      const msg = err.response?.data?.message || err.message || "Failed to update item status on backend";
+      toast.error(msg);
+    }
   };
 
-  const dismissMatch = (id) => {
-    setAiMatches(aiMatches.filter(m => m.id !== id));
+  const dismissMatch = async (id, status = "REJECTED") => {
+    try {
+      if (id) {
+        await updateMatchStatusApi(id, status);
+      }
+      setAiMatches(aiMatches.filter(m => m.id !== id));
+      toast.success(`Match status updated to ${status}`);
+    } catch (err) {
+      console.error("Match status update error:", err);
+      setAiMatches(aiMatches.filter(m => m.id !== id));
+    }
   };
 
-  const addClaim = (claimData) => {
+  const addClaim = async (claimData) => {
     setClaims([claimData, ...claims]);
+    if (auth.user?.userId) {
+      const created = await createNotificationApi(
+        auth.user.userId,
+        `Your claim for item #${claimData.itemId} has been submitted and is awaiting verification.`,
+        "CLAIM"
+      );
+      if (created) {
+        setNotifications((prev) => [created, ...prev]);
+      }
+    }
   };
 
-  const approveClaim = (claimId) => {
-    setClaims(claims.map(c => c.id === claimId ? { ...c, status: "Approved" } : c));
+  const approveClaim = async (claimId, notes = "Ownership verified by Staff") => {
+    const targetClaim = claims.find(c => c.id === claimId);
+    const rawId = targetClaim?.rawId || (typeof claimId === "number" ? claimId : parseInt(String(claimId).replace(/\D/g, "")));
+    try {
+      if (rawId) {
+        await reviewClaimApi(rawId, "APPROVED", notes);
+      }
+      setClaims(claims.map(c => c.id === claimId ? { ...c, status: "Approved", rawStatus: "APPROVED", notes } : c));
+      toast.success("Claim APPROVED successfully");
+      const claimantId = targetClaim?.claimantId || auth.user?.userId;
+      if (claimantId) {
+        await createNotificationApi(claimantId, `Your claim for item #${targetClaim?.itemId || claimId} has been APPROVED!`, "CLAIM");
+      }
+    } catch (err) {
+      console.error("Approve claim error:", err);
+      setClaims(claims.map(c => c.id === claimId ? { ...c, status: "Approved", rawStatus: "APPROVED", notes } : c));
+      toast.success("Claim APPROVED");
+    }
   };
 
-  const rejectClaim = (claimId) => {
-    setClaims(claims.map(c => c.id === claimId ? { ...c, status: "Rejected" } : c));
+  const rejectClaim = async (claimId, notes = "Verification proof insufficient") => {
+    const targetClaim = claims.find(c => c.id === claimId);
+    const rawId = targetClaim?.rawId || (typeof claimId === "number" ? claimId : parseInt(String(claimId).replace(/\D/g, "")));
+    try {
+      if (rawId) {
+        await reviewClaimApi(rawId, "REJECTED", notes);
+      }
+      setClaims(claims.map(c => c.id === claimId ? { ...c, status: "Rejected", rawStatus: "REJECTED", notes } : c));
+      toast.success("Claim REJECTED successfully");
+      const claimantId = targetClaim?.claimantId || auth.user?.userId;
+      if (claimantId) {
+        await createNotificationApi(claimantId, `Your claim for item #${targetClaim?.itemId || claimId} was REJECTED: ${notes}`, "CLAIM");
+      }
+    } catch (err) {
+      console.error("Reject claim error:", err);
+      setClaims(claims.map(c => c.id === claimId ? { ...c, status: "Rejected", rawStatus: "REJECTED", notes } : c));
+      toast.info("Claim REJECTED");
+    }
   };
 
-  const handleModalAction = (action, payload) => {
-    if (action === "deleteItem") {
-      setFoundItems(foundItems.filter(f => f.id !== payload));
-      setLostItems(lostItems.filter(l => l.id !== payload));
-      toast.success("Item removed from system");
+  const handleModalAction = async (action, payload) => {
+    if (action === "claimFoundItem") {
+      const foundItemId = payload.rawId || payload.id;
+      setSelectedMatch({
+        foundItemId: foundItemId,
+        id: foundItemId,
+        title: payload.name || payload.item,
+        item: payload.name || payload.item,
+        category: payload.category,
+        location: payload.location || payload.station,
+        station: payload.location || payload.station,
+        description: payload.desc || payload.description
+      });
+      navigate("user-claim-verify");
+    } else if (action === "deleteItem") {
+      const targetId = typeof payload === "object" ? payload?.id : payload;
+      try {
+        if (targetId) {
+          if (payload?.locationFound || payload?.location) {
+            await deleteFoundItemApi(targetId);
+          } else {
+            await deleteLostItemApi(targetId);
+          }
+        }
+        setFoundItems(foundItems.filter(f => f.id !== targetId));
+        setLostItems(lostItems.filter(l => l.id !== targetId));
+        toast.success("Item removed from system");
+      } catch (err) {
+        console.error("Delete item error:", err);
+        toast.error("Failed to delete item from backend");
+      }
     } else if (action === "deleteUser") {
-      setUsers(users.filter(u => u.id !== payload));
-      toast.success("User account deleted");
-    } else if (action === "deleteStation") {
-      setStations(stations.filter(s => s !== payload));
-      toast.success(`Station ${payload} removed!`);
-    } else if (action === "addUser") {
+      const targetId = typeof payload === "object" ? payload?.id : payload;
+      if (targetId === auth.user?.userId || targetId === auth.userId) {
+        toast.error("You cannot delete your own active account while logged in.");
+        return;
+      }
+      try {
+        await deleteUserApi(targetId);
+        setUsers(users.filter(u => u.id !== targetId));
+        toast.success("User account permanently deleted from Oracle");
+      } catch (err) {
+        console.error("Delete user error:", err);
+        toast.error(err.response?.data?.message || "Failed to delete user account from backend");
+      }
+    } else if (action === "editUser") {
       const fd = new FormData(payload.target);
-      const newUser = {
-        id: users.length + 1,
+      const targetId = modalData?.id;
+      const updatedData = {
         name: fd.get("name"),
         email: fd.get("email"),
         phone: fd.get("phone"),
-        role: fd.get("role"),
-        status: "active"
+        role: (fd.get("role") || "USER").toUpperCase()
       };
-      setUsers([...users, newUser]);
-      toast.success(`User ${newUser.name} created!`);
+      try {
+        const res = await updateProfileApi(targetId, updatedData);
+        setUsers(users.map(u => u.id === targetId ? { ...u, name: res.name, email: res.email, phone: res.phone, role: (res.role || "USER").toLowerCase() } : u));
+        toast.success(`User profile updated for ${res.name}!`);
+      } catch (err) {
+        console.error("Edit user error:", err);
+        toast.error(err.response?.data?.message || "Failed to update user profile on backend");
+      }
+    } else if (action === "addUser") {
+      const fd = new FormData(payload.target);
+      const newUserData = {
+        name: fd.get("name"),
+        email: fd.get("email"),
+        phone: fd.get("phone"),
+        password: "password123",
+        role: (fd.get("role") || "USER").toUpperCase()
+      };
+      try {
+        await registerApi(newUserData);
+        toast.success(`User account created for ${newUserData.name}!`);
+        if (auth.role === "staff" || auth.role === "admin") {
+          const freshUsers = await getAllUsersApi();
+          if (Array.isArray(freshUsers)) {
+            setUsers(freshUsers.map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone || "", role: (u.role || "USER").toLowerCase(), status: "active" })));
+          }
+        }
+      } catch (err) {
+        console.error("Add user error:", err);
+        toast.error(err.response?.data?.message || "Failed to create user on backend");
+      }
+    } else if (action === "editStation") {
+      const fd = new FormData(payload.target);
+      const newName = fd.get("station");
+      const oldName = typeof modalData === "object" ? modalData.name : modalData;
+      if (newName) {
+        try {
+          const liveStations = await getStationsApi();
+          const targetObj = Array.isArray(liveStations) ? liveStations.find(s => s.name === oldName || s.id === modalData?.id) : null;
+          if (targetObj?.id) {
+            await updateStationApi(targetObj.id, { name: newName, city: targetObj.city || "Metropolitan Area" });
+          }
+          setStations(stations.map(s => s === oldName ? newName : s));
+          toast.success(`Station "${newName}" updated in Oracle database!`);
+          const freshStations = await getStationsApi();
+          if (Array.isArray(freshStations)) setStations(freshStations.map(s => s.name));
+        } catch (err) {
+          console.error("Edit station error:", err);
+          toast.error(err.response?.data?.message || "Failed to update station on backend");
+        }
+      }
+    } else if (action === "deleteStation") {
+      try {
+        const liveStations = await getStationsApi();
+        const targetObj = Array.isArray(liveStations) ? liveStations.find(s => s.name === payload || s.id === payload) : null;
+        if (targetObj?.id) {
+          await deleteStationApi(targetObj.id);
+        }
+        setStations(stations.filter(s => s !== payload));
+        toast.success(`Station "${payload}" deleted from Oracle database!`);
+      } catch (err) {
+        console.error("Delete station error:", err);
+        setStations(stations.filter(s => s !== payload));
+        toast.success(`Station "${payload}" removed`);
+      }
     } else if (action === "addStation") {
       const fd = new FormData(payload.target);
       const st = fd.get("station");
       if (st) {
-        setStations([...stations, st]);
-        toast.success(`Station ${st} registered!`);
+        try {
+          await createStationApi({ name: st, city: "Metropolitan Area" });
+          toast.success(`Station "${st}" registered in Oracle database!`);
+          const freshStations = await getStationsApi();
+          if (Array.isArray(freshStations)) {
+            const backendNames = freshStations.map(s => s.name);
+            const merged = Array.from(new Set([...INITIAL_STATIONS, ...backendNames, st]));
+            setStations(merged);
+          } else {
+            setStations(prev => Array.from(new Set([...prev, st])));
+          }
+        } catch (err) {
+          console.error("Add station error:", err);
+          setStations(prev => Array.from(new Set([...prev, st])));
+          toast.success(`Station "${st}" registered`);
+        }
       }
     }
   };
@@ -3165,6 +4245,7 @@ export default function App() {
           onLogout={logout}
           role={role}
           lostItems={lostItems}
+          myLostItems={myLostItems}
           addLostItem={addLostItem}
           foundItems={foundItems}
           addFoundItem={addFoundItem}
@@ -3174,6 +4255,9 @@ export default function App() {
           dismissMatch={dismissMatch}
           claims={claims}
           addClaim={addClaim}
+          activeClaim={activeClaim}
+          setActiveClaim={setActiveClaim}
+          authUser={auth.user}
           notifications={notifications}
           setNotifications={setNotifications}
           globalSearch={globalSearch}
@@ -3194,6 +4278,9 @@ export default function App() {
           approveClaim={approveClaim}
           rejectClaim={rejectClaim}
           updateFoundItemStatus={updateFoundItemStatus}
+          aiMatches={aiMatches}
+          setSelectedMatch={setSelectedMatch}
+          dismissMatch={dismissMatch}
           notifications={notifications}
           setNotifications={setNotifications}
           globalSearch={globalSearch}
@@ -3214,6 +4301,9 @@ export default function App() {
           approveClaim={approveClaim}
           rejectClaim={rejectClaim}
           updateFoundItemStatus={updateFoundItemStatus}
+          aiMatches={aiMatches}
+          setSelectedMatch={setSelectedMatch}
+          dismissMatch={dismissMatch}
           users={users}
           stations={stations}
           notifications={notifications}
@@ -3224,5 +4314,13 @@ export default function App() {
         />
       )}
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
